@@ -12,6 +12,11 @@ export default defineConfig({
       '@': path.resolve(import.meta.dirname, './src'),
     },
   },
+  optimizeDeps: {
+    // Scan every source file up front so the dev server doesn't reload the page
+    // halfway through first load when it discovers a new library.
+    entries: ['index.html', 'src/**/*.{ts,tsx}', '!src/**/*.test.{ts,tsx}', '!src/test/**'],
+  },
   test: {
     environment: 'jsdom',
     globals: true,

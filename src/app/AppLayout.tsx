@@ -1,19 +1,33 @@
-import { Outlet } from 'react-router'
+import { useNavigate, Outlet } from 'react-router'
 import { toast } from 'sonner'
+import { useProfile } from '@/api/profile'
 import { AppShell } from '@/components/layout/AppShell'
-
-// Temporary user until login is wired up (step 6).
-const placeholderUser = { name: null, email: 'you@example.com' }
+import { supabase } from '@/lib/supabase'
+import { useAuth } from './auth-context'
 
 export default function AppLayout() {
+  const { user } = useAuth()
+  const navigate = useNavigate()
+  const { data: profile } = useProfile(user?.id)
+
+  async function signOut() {
+    // 'local' signs out this browser only, so your phone stays signed in.
+    const { error } = await supabase.auth.signOut({ scope: 'local' })
+    if (error) {
+      toast.error("Couldn't sign out. Try again.")
+      return
+    }
+    navigate('/login', { replace: true })
+  }
+
   return (
     <AppShell
       topBar={{
-        user: placeholderUser,
+        user: { name: profile?.display_name ?? null, email: user?.email ?? '' },
         onSearch: () => toast('Search is coming in a later phase.'),
         onNew: () => toast('Quick add is coming in a later phase.'),
         onNotifications: () => toast('No notifications yet.'),
-        onSignOut: () => toast('Sign out arrives with login.'),
+        onSignOut: () => void signOut(),
       }}
       sidebar={{}}
     >

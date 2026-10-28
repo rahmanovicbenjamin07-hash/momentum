@@ -1,0 +1,4 @@
+-- Development seed data (only used by a local Supabase stack: `supabase db reset`).
+-- Never run against the live project.
+--
+-- Profiles are created automatically when a user signs up, so Phase 0 needs no seed rows.
