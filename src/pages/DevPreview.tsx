@@ -26,6 +26,31 @@ import { STREAK_LEVELS } from '@/lib/streak-levels'
 import { dayIndex, toDateKey } from '@/lib/dates'
 import { todayProgress } from '@/lib/progress'
 import { toHHMM } from '@/lib/today-list'
+import { AddLeadForm } from '@/components/outreach/AddLeadForm'
+import { ContactsTable } from '@/components/outreach/ContactsTable'
+import { CsvImportDialog, type CsvPreview } from '@/components/outreach/CsvImportDialog'
+import { FollowUpText } from '@/components/outreach/FollowUpText'
+import { PipelineBoard } from '@/components/outreach/PipelineBoard'
+import { TemplatesDialog } from '@/components/outreach/TemplatesDialog'
+import { findDuplicate } from '@/lib/outreach'
+import type { AddLeadFormInput } from '@/schemas/outreach'
+import { LEAD_SOURCES, LEAD_STAGES, type SourceFilterValue, type StageFilterValue } from '@/components/outreach/meta'
+import { OutreachHeader, type OutreachView } from '@/components/outreach/OutreachHeader'
+import { OutreachToolbar } from '@/components/outreach/OutreachToolbar'
+import { SourceChip } from '@/components/outreach/SourceChip'
+import { SourceFilter } from '@/components/outreach/SourceFilter'
+import { StageCounts } from '@/components/outreach/StageCounts'
+import { StagePill } from '@/components/outreach/StagePill'
+import {
+  MOCK_OUTREACH_TODAY,
+  mockContacts,
+  mockCsvPreview,
+  mockTemplates,
+  mockFollowUps,
+  mockOutreachSummary,
+  mockSourceCounts,
+  mockStageCounts,
+} from '@/mocks/outreach'
 import { mockSidebar, mockUnreadCount, mockUser } from '@/mocks/shell'
 import {
   MOCK_TODAY,
@@ -184,6 +209,150 @@ function PromptsDemo() {
   )
 }
 
+/** Outreach header + filters + toolbar with local state, so clicks and typing feel real. */
+function OutreachControlsDemo() {
+  const [view, setView] = useState<OutreachView>('table')
+  const [source, setSource] = useState<SourceFilterValue>('all')
+  const [stage, setStage] = useState<StageFilterValue>('all')
+  const [search, setSearch] = useState('')
+  const [followUpDue, setFollowUpDue] = useState(false)
+
+  return (
+    <div className="flex flex-col gap-4">
+      <OutreachHeader
+        {...mockOutreachSummary}
+        view={view}
+        onViewChange={(v) => {
+          setView(v)
+          log('view')(v)
+        }}
+        onTemplates={log('templates')}
+        onImportCsv={log('import CSV')}
+        onAddLead={log('add lead')}
+      />
+      <SourceFilter counts={mockSourceCounts} value={source} onChange={setSource} />
+      <StageCounts counts={mockStageCounts} value={stage} onChange={setStage} />
+      <OutreachToolbar
+        search={search}
+        onSearchChange={setSearch}
+        followUpDue={followUpDue}
+        onFollowUpDueChange={setFollowUpDue}
+      />
+      <p className="text-xs text-ink-3">
+        State: view={view} · source={source} · stage={stage} · search=&quot;{search}&quot; · followUpDue={String(followUpDue)}
+      </p>
+    </div>
+  )
+}
+
+/** Board with local state, so dragging really moves cards. */
+function BoardDemo() {
+  const [contacts, setContacts] = useState(mockContacts)
+  return (
+    <PipelineBoard
+      contacts={contacts}
+      today={MOCK_OUTREACH_TODAY}
+      onMove={(id, stage) => {
+        setContacts((prev) => prev.map((c) => (c.id === id ? { ...c, stage } : c)))
+        log('move')({ id, stage })
+      }}
+    />
+  )
+}
+
+/** Add lead form with a live duplicate check against the mock leads. */
+function AddLeadDemo() {
+  const [open, setOpen] = useState(true)
+  const [draft, setDraft] = useState<Partial<AddLeadFormInput>>({})
+  const duplicate = findDuplicate(draft as Parameters<typeof findDuplicate>[0], mockContacts)
+
+  if (!open) {
+    return (
+      <Button variant="outline" className="bg-card" onClick={() => setOpen(true)}>
+        Open Add lead again
+      </Button>
+    )
+  }
+  return (
+    <AddLeadForm
+      defaultSource="maps"
+      onDraftChange={setDraft}
+      duplicateWarning={
+        duplicate && (
+          <>
+            <strong>{duplicate.contact.name}</strong> already has this {duplicate.field === 'email' ? 'email' : 'link'}. You can
+            still save it.
+          </>
+        )
+      }
+      onCancel={() => setOpen(false)}
+      onSubmit={async (values) => {
+        await new Promise((resolve) => setTimeout(resolve, 300))
+        if (JSON.stringify(values).includes('fail')) throw new Error("Couldn't save. Check your connection and try again.")
+        log('save lead')(values)
+        setOpen(false)
+      }}
+    />
+  )
+}
+
+/** Buttons that open the Templates and Import CSV dialogs. */
+function OutreachDialogsDemo() {
+  const [templatesOpen, setTemplatesOpen] = useState(false)
+  const [templates, setTemplates] = useState(mockTemplates)
+  const [csvOpen, setCsvOpen] = useState(false)
+  const [csvPreview, setCsvPreview] = useState<CsvPreview | null>(null)
+  const [parsing, setParsing] = useState(false)
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button variant="outline" className="bg-card" onClick={() => setTemplatesOpen(true)}>
+        Templates
+      </Button>
+      <Button variant="outline" className="bg-card" onClick={() => setCsvOpen(true)}>
+        Import CSV
+      </Button>
+      <TemplatesDialog
+        open={templatesOpen}
+        onOpenChange={setTemplatesOpen}
+        templates={templates}
+        onSave={async (values, id) => {
+          await new Promise((resolve) => setTimeout(resolve, 300))
+          const row = { name: values.name, channel: values.channel ?? null, body: values.body }
+          setTemplates((prev) =>
+            id ? prev.map((t) => (t.id === id ? { ...t, ...row } : t)) : [...prev, { id: crypto.randomUUID(), ...row }],
+          )
+          log('template saved')(values.name)
+        }}
+      />
+      <CsvImportDialog
+        open={csvOpen}
+        onOpenChange={(next) => {
+          setCsvOpen(next)
+          if (!next) setCsvPreview(null)
+        }}
+        preview={csvPreview}
+        parsing={parsing}
+        onFileSelect={(file) => {
+          // Any file shows the same mock preview here; the real parsing comes from [LOGIC].
+          setParsing(true)
+          setTimeout(() => {
+            setParsing(false)
+            setCsvPreview(mockCsvPreview)
+            log('file')(file.name)
+          }, 400)
+        }}
+        onImport={async () => {
+          await new Promise((resolve) => setTimeout(resolve, 400))
+          log('imported')(csvPreview?.rows.length)
+          setCsvOpen(false)
+          setCsvPreview(null)
+        }}
+      />
+    </div>
+  )
+}
+
 const swatches = [
   ['Page', 'bg-background'],
   ['Card', 'bg-card'],
@@ -304,6 +473,69 @@ export default function DevPreview() {
         <Section title="TodayTasksCard (tick, filter, Edit repeating — changes stay until reload)">
           <div className="max-w-[830px]">
             <TasksDemo />
+          </div>
+        </Section>
+
+        <Section title="Outreach: header, source filter, stage counts, toolbar (click and type)">
+          <div className="rounded-xl border border-dashed border-border p-4">
+            <OutreachControlsDemo />
+          </div>
+        </Section>
+
+        <Section title="Outreach: AddLeadForm (switch source; paste https://novadental.ba as website to see the duplicate warning; 'fail' in a field shows an error)">
+          <AddLeadDemo />
+        </Section>
+
+        <Section title="Outreach: Templates and Import CSV dialogs (any file shows the mock preview)">
+          <OutreachDialogsDemo />
+        </Section>
+
+        <Section title="Outreach: ContactsTable (click a row → /outreach/:id)">
+          <ContactsTable
+            contacts={mockContacts}
+            today={MOCK_OUTREACH_TODAY}
+            footer={
+              <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-ink-2">
+                Showing 8 of 38
+                <div className="flex gap-2">
+                  <Button variant="outline">Previous</Button>
+                  <Button variant="outline">Next</Button>
+                </div>
+              </div>
+            }
+          />
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <ContactsTable contacts={[]} today={MOCK_OUTREACH_TODAY} onAddLead={log('add lead')} />
+            <ContactsTable contacts={[]} today={MOCK_OUTREACH_TODAY} filtered onClearFilters={log('clear filters')} />
+          </div>
+        </Section>
+
+        <Section title="Outreach: PipelineBoard (drag a card; or Tab to a ⋮⋮ grip, Space, ← →, Space)">
+          <BoardDemo />
+        </Section>
+
+        <Section title="Outreach: SourceChip, StagePill, FollowUpText (today = 28 Oct 2026)">
+          <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5">
+            <div className="flex flex-wrap gap-2">
+              {LEAD_SOURCES.map((s) => (
+                <SourceChip key={s} source={s} />
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {LEAD_STAGES.map((s) => (
+                <StagePill key={s} stage={s} />
+              ))}
+            </div>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:w-fit">
+              {mockFollowUps.map(({ label, date }) => (
+                <div key={label} className="contents">
+                  <dt className="text-ink-2">{label}</dt>
+                  <dd>
+                    <FollowUpText date={date} today={MOCK_OUTREACH_TODAY} />
+                  </dd>
+                </div>
+              ))}
+            </dl>
           </div>
         </Section>
 
