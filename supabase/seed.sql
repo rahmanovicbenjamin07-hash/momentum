@@ -4,8 +4,12 @@
 --   * Supabase dashboard → SQL Editor (live project): adds demo data to YOUR account.
 --   * Local stack (`supabase db reset`): there are no users there, so it just skips.
 --
+-- Two independent parts: Today (below) and Outreach (second block, matches design/outreach.png
+-- and design/contact.png). Each part skips itself if your account already has that kind of data,
+-- so you can run the whole file again after a new phase is added.
+--
 -- Safe by design:
---   * It never deletes anything. It stops if your account already has routine items or tasks.
+--   * It never deletes anything. The Today part skips if your account already has routine items or tasks.
 --   * All dates are relative to "today" in Europe/Sarajevo, so it looks right whenever you run it.
 --     The 3-of-5 routine split from the screenshot shows exactly on a Mon/Wed/Fri.
 --
@@ -52,7 +56,9 @@ begin
 
   if exists (select 1 from public.routine_items where user_id = v_user)
      or exists (select 1 from public.tasks where user_id = v_user) then
-    raise exception 'Seed stopped: this account already has routine items or tasks. Nothing was changed.';
+    -- Notice (not an error) so the Outreach part below still runs.
+    raise notice 'Today seed skipped: this account already has routine items or tasks. Nothing was changed.';
+    return;
   end if;
 
   -- ---------------------------------------------------------------------------
@@ -143,5 +149,287 @@ begin
   values (v_user, v_today, 4);
 
   raise notice 'Demo data added for user % (today = %).', v_user, v_today;
+end;
+$$;
+
+-- =============================================================================
+-- Outreach demo data (design/outreach.png + design/contact.png).
+--
+-- What you get:
+--   * 5 message templates.
+--   * 38 leads: LinkedIn 12 · Google Maps 14 · In person 5 · Upwork 7.
+--     Stages: New 9 · Contacted 13 · Replied 6 · Meeting 4 · Proposal 3 · Won 2 · Lost 1.
+--     4 follow-ups due (2 today, 2 late) and €18,400 open pipeline, as in the screenshot.
+--   * Emir Kovač exactly like design/contact.png (details, notes, 4-entry timeline).
+--   * Touches for every lead past "New" (last_touch_at is filled in by the trigger),
+--     and a stage history for each lead (new → … → current stage).
+--   * Links the Today tasks "Follow up with Emir Kovač…" and "Send proposal to Lejla Hodžić" to their contacts.
+--
+-- Skips itself if your account already has contacts or templates.
+-- =============================================================================
+do $$
+declare
+  -- Only needed if the project has more than one user: put your login email here.
+  v_email text := null;
+
+  v_user uuid;
+  v_user_count int;
+  v_tz constant text := 'Europe/Sarajevo';
+  v_today date := (now() at time zone 'Europe/Sarajevo')::date;
+
+  v_tpl_opener uuid;
+  v_tpl_follow1 uuid;
+  v_tpl_nosite uuid;
+  v_tpl_upwork uuid;
+  v_emir uuid;
+begin
+  -- ---------------------------------------------------------------------------
+  -- Whose account? (same rules as the Today part)
+  -- ---------------------------------------------------------------------------
+  if v_email is not null then
+    select id into v_user from auth.users where lower(email) = lower(v_email);
+    if v_user is null then
+      raise exception 'No user with email %. Check the spelling, or sign in to the app once first.', v_email;
+    end if;
+  else
+    select count(*) into v_user_count from auth.users;
+    if v_user_count = 0 then
+      raise notice 'Outreach seed skipped: no users yet. Sign in to the app once, then run this file again.';
+      return;
+    elsif v_user_count > 1 then
+      raise exception 'This project has % users. Set v_email at the top of both seed blocks to your login email.', v_user_count;
+    end if;
+    select id into v_user from auth.users;
+  end if;
+
+  if exists (select 1 from public.contacts where user_id = v_user)
+     or exists (select 1 from public.templates where user_id = v_user) then
+    raise notice 'Outreach seed skipped: this account already has contacts or templates. Nothing was changed.';
+    return;
+  end if;
+
+  -- ---------------------------------------------------------------------------
+  -- Templates
+  -- ---------------------------------------------------------------------------
+  insert into public.templates (user_id, created_at, name, channel, body)
+  values (v_user, now() - interval '30 days', 'Opener A', 'linkedin',
+    'Hi {{first_name}}, congrats on the launch. I noticed your booking page is slow on mobile. I help small studios fix exactly that. Open to a 15-minute call?')
+  returning id into v_tpl_opener;
+
+  insert into public.templates (user_id, created_at, name, channel, body)
+  values (v_user, now() - interval '30 days', 'Follow-up #1', 'linkedin',
+    'Hi {{first_name}}, following up on my note from last week. Happy to share a quick audit of your booking page on mobile, no strings attached.')
+  returning id into v_tpl_follow1;
+
+  insert into public.templates (user_id, created_at, name, channel, body)
+  values (v_user, now() - interval '30 days', 'Follow-up #2', null,
+    'Hi {{first_name}}, last nudge from me. If now isn''t the right time, no problem. Just let me know and I''ll check back in a few months.');
+
+  insert into public.templates (user_id, created_at, name, channel, body)
+  values (v_user, now() - interval '30 days', 'No website intro', 'email',
+    'Hi {{first_name}}, I found your business on Google Maps but couldn''t find a website. I build simple, fast sites for local businesses, usually live in two weeks. Want me to send a free mock-up?')
+  returning id into v_tpl_nosite;
+
+  insert into public.templates (user_id, created_at, name, channel, body)
+  values (v_user, now() - interval '30 days', 'Upwork proposal', 'upwork',
+    'Hi {{first_name}}, I''ve shipped several projects like this one. Here''s how I''d approach it: a short call to agree the scope, a first version within a week, then two rounds of changes. Happy to share examples.')
+  returning id into v_tpl_upwork;
+
+  -- ---------------------------------------------------------------------------
+  -- Leads. One row per lead in a temporary table (gone when this script ends),
+  -- then copied into contacts.
+  --   fu_in     = next follow-up in N days (negative = late, null = none)
+  --   added_ago = created N days ago
+  --   touch_ago = last sent/received touch N days ago (null = never contacted)
+  -- ---------------------------------------------------------------------------
+  create temp table seed_leads (
+    id uuid primary key default gen_random_uuid(),
+    source text not null,
+    name text not null,
+    company text, role text, category text, city text,
+    phone text, email text, website text, linkedin text, met_where text,
+    budget numeric, connects int, proposal_status text,
+    stage text not null, channel text, priority text not null default 'medium',
+    deal_value numeric, won_amount numeric,
+    fu_in int, added_ago int not null, touch_ago int,
+    tags text[] not null default '{}'
+  ) on commit drop;
+
+  -- LinkedIn (12)
+  insert into seed_leads (source, name, company, role, city, linkedin, email, phone, website, stage, channel, priority, deal_value, fu_in, added_ago, touch_ago, tags)
+  values
+    ('linkedin', 'Emir Kovač',   'Bloom Studio',        'Founder',            'Sarajevo',  'example-emir-kovac',   'emir.kovac@example.com', '+387 61 000 000', 'https://bloom-studio.example', 'replied', 'linkedin', 'high', 1200, 0, 14, 3, '{agency,warm}'),
+    ('linkedin', 'Daniel Weber', 'Kraft & Co',          'Marketing lead',     'Berlin',    'example-daniel-weber', null, null, null, 'new',       'linkedin', 'medium', null, 6,    0,  null, '{}'),
+    ('linkedin', 'Lejla Hodžić', 'Hodžić Consulting',   'Owner',              'Sarajevo',  'example-lejla-hodzic', 'lejla@hodzic-consulting.example', null, null, 'proposal', 'email', 'high', 1800, 2, 30, 1, '{warm}'),
+    ('linkedin', 'Amar Delić',   'Pixel Forge',         'CEO',                'Sarajevo',  'example-amar-delic',   null, null, null, 'replied',   'linkedin', 'medium', 900,  1,    12, 2,    '{agency}'),
+    ('linkedin', 'Lana Marić',   'Brightside Agency',   'Head of Marketing',  'Zagreb',    'example-lana-maric',   null, null, null, 'contacted', 'linkedin', 'medium', null, 3,    8,  0,    '{agency}'),
+    ('linkedin', 'Tarik Mehić',  'Codeworks',           'CTO',                'Tuzla',     'example-tarik-mehic',  null, null, null, 'contacted', 'linkedin', 'low',    null, 2,    9,  1,    '{}'),
+    ('linkedin', 'Ivana Perić',  'Atelier North',       'Founder',            'Split',     'example-ivana-peric',  null, null, null, 'new',       'linkedin', 'medium', null, 1,    1,  null, '{}'),
+    ('linkedin', 'Haris Jusić',  'Greenline Logistics', 'Operations manager', 'Sarajevo',  'example-haris-jusic',  null, null, null, 'new',       'linkedin', 'medium', null, 3,    2,  null, '{}'),
+    ('linkedin', 'Mia Novak',    'Studio Oblik',        'Designer',           'Ljubljana', 'example-mia-novak',    null, null, null, 'contacted', 'linkedin', 'low',    null, 4,    10, 0,    '{}'),
+    ('linkedin', 'Kenan Hadžić', 'Urban Coffee',        'Owner',              'Mostar',    'example-kenan-hadzic', null, null, null, 'lost',      'linkedin', 'low',    800,  null, 40, 20,   '{}'),
+    ('linkedin', 'Jasmina Kurt', 'Kurt Legal',          'Partner',            'Sarajevo',  'example-jasmina-kurt', 'jasmina@kurt-legal.example', null, null, 'replied', 'email', 'medium', 1100, 2, 15, 1, '{}'),
+    ('linkedin', 'Petra Horvat', 'Nordic Wood',         'Marketing lead',     'Zagreb',    'example-petra-horvat', null, null, null, 'new',       'linkedin', 'medium', null, 6,    0,  null, '{}');
+
+  -- Google Maps (14). No website => "no-website" tag, like the Add lead form does.
+  insert into seed_leads (source, name, category, city, phone, email, website, stage, channel, priority, deal_value, won_amount, fu_in, added_ago, touch_ago, tags)
+  values
+    ('maps', 'Nova Dental',         'Dentist',            'Sarajevo',   '+387 33 100 200', 'info@nova-dental.example',      'https://nova-dental.example',     'proposal',  'email',    'high',   2400, null, -1,   20, 1,    '{}'),
+    ('maps', 'Mostar Tours',        'Travel agency',      'Mostar',     '+387 36 100 300', null,                            null,                              'contacted', 'phone',    'medium', 700,  null, -2,   9,  4,    '{no-website}'),
+    ('maps', 'Fitbox Gym',          'Gym',                'Sarajevo',   '+387 33 100 400', 'hello@fitbox.example',          'https://fitbox.example',          'won',       'inperson', 'high',   3000, 3000, null, 45, 14,   '{}'),
+    ('maps', 'Dental Smile',        'Dentist',            'Tuzla',      '+387 35 100 500', null,                            'https://dental-smile.example',    'contacted', 'phone',    'medium', null, null, 3,    7,  1,    '{}'),
+    ('maps', 'Bistro Lipa',         'Restaurant',         'Sarajevo',   '+387 33 100 600', null,                            null,                              'new',       'phone',    'medium', null, null, 1,    1,  null, '{no-website}'),
+    ('maps', 'AutoServis Begić',    'Car repair',         'Zenica',     '+387 32 100 700', null,                            null,                              'contacted', 'phone',    'low',    null, null, 2,    6,  2,    '{no-website}'),
+    ('maps', 'Hotel Neretva',       'Hotel',              'Mostar',     '+387 36 100 800', 'booking@hotel-neretva.example', 'https://hotel-neretva.example',   'replied',   'email',    'high',   1500, null, 1,    16, 1,    '{}'),
+    ('maps', 'Pekara Zlatno Zrno',  'Bakery',             'Sarajevo',   '+387 33 100 900', null,                            null,                              'new',       'phone',    'medium', null, null, 2,    2,  null, '{no-website}'),
+    ('maps', 'Yoga Space',          'Yoga studio',        'Sarajevo',   '+387 61 100 100', 'hi@yoga-space.example',         'https://yoga-space.example',      'replied',   'email',    'medium', 360,  null, 2,    11, 2,    '{}'),
+    ('maps', 'Frizerski salon Ena', 'Hair salon',         'Sarajevo',   '+387 62 100 200', null,                            null,                              'contacted', 'phone',    'low',    null, null, 3,    5,  1,    '{no-website}'),
+    ('maps', 'Vet Klinika Šapa',    'Veterinary clinic',  'Banja Luka', '+387 51 100 300', 'info@sapa-vet.example',         'https://sapa-vet.example',        'meeting',   'phone',    'medium', 1200, null, 2,    18, 2,    '{}'),
+    ('maps', 'Cvjećara Ruža',       'Florist',            'Mostar',     '+387 36 100 400', null,                            null,                              'new',       'phone',    'medium', null, null, 4,    3,  null, '{no-website}'),
+    ('maps', 'Apartmani Sunce',     'Holiday apartments', 'Neum',       '+387 36 100 500', 'sunce@apartmani.example',       'https://apartmani-sunce.example', 'contacted', 'email',    'low',    null, null, 5,    8,  2,    '{}'),
+    ('maps', 'Fitness Pro',         'Gym',                'Zenica',     '+387 32 100 600', 'info@fitness-pro.example',      'https://fitness-pro.example',     'won',       'inperson', 'medium', 2000, 2000, null, 50, 21,   '{}');
+
+  -- In person (5)
+  insert into seed_leads (source, name, company, role, city, met_where, phone, email, stage, channel, priority, deal_value, fu_in, added_ago, touch_ago, tags)
+  values
+    ('inperson', 'Sara Begić',      'Atelier Sara',       'Owner',      'Sarajevo', 'Startup Meetup',              '+387 61 200 100', null,                        'meeting',   'phone', 'high',   1500, 0, 12, 0,    '{warm}'),
+    ('inperson', 'Adnan Selimović', 'Selimović & Sons',   'Director',   'Sarajevo', 'Chamber of Commerce evening', null,              'adnan@selimovic.example',   'contacted', 'email', 'medium', null, 3, 6,  1,    '{}'),
+    ('inperson', 'Nina Babić',      'Babić Photo',        'Owner',      'Sarajevo', 'Startup Meetup',              '+387 61 200 300', null,                        'new',       'phone', 'medium', null, 2, 1,  null, '{}'),
+    ('inperson', 'Edin Mujić',      'Mujić Construction', 'Owner',      'Tuzla',    'a friend''s wedding',         '+387 61 200 400', null,                        'replied',   'phone', 'medium', 1000, 3, 13, 2,    '{}'),
+    ('inperson', 'Selma Hasić',     'Craft Bakery Co',    'Co-founder', 'Sarajevo', 'Sarajevo Business Fair',      null,              'selma@craftbakery.example', 'new',       'email', 'medium', null, 5, 2,  null, '{}');
+
+  -- Upwork (7). The lead name is the job title (no client name yet). Budget is the number from the job post.
+  insert into seed_leads (source, name, budget, connects, proposal_status, stage, channel, priority, deal_value, fu_in, added_ago, touch_ago)
+  values
+    ('upwork', 'Shopify store redesign',                  800,  12, 'sent',      'contacted', 'upwork', 'medium', 740,  2, 5,  2),
+    ('upwork', 'React dashboard for a logistics startup', 35,   16, 'interview', 'meeting',   'upwork', 'high',   2100, 1, 10, 1),
+    ('upwork', 'Landing page for SaaS launch',            600,  10, 'sent',      'contacted', 'upwork', 'medium', null, 2, 3,  3),
+    ('upwork', 'Webflow site migration',                  1200, 14, 'viewed',    'contacted', 'upwork', 'medium', null, 3, 6,  2),
+    ('upwork', 'Fix React Native login bug',              45,   8,  'interview', 'meeting',   'upwork', 'medium', 900,  2, 8,  1),
+    ('upwork', 'E-commerce product filters',              500,  6,  'sent',      'contacted', 'upwork', 'low',    null, 4, 4,  1),
+    ('upwork', 'Booking widget for a clinic',             1000, 12, 'interview', 'proposal',  'upwork', 'medium', 1000, 3, 14, 2);
+
+  insert into public.contacts (
+    id, user_id, created_at, source, name, company, role, category, city, phone, email, website,
+    linkedin_url, maps_url, met_where, upwork_job_title, upwork_job_url, upwork_budget, connects_spent,
+    proposal_status, stage, channel, priority, deal_value, won_amount, won_month, next_follow_up, tags)
+  select
+    l.id, v_user,
+    least(((v_today - l.added_ago) + time '09:00') at time zone v_tz, now()),
+    l.source, l.name, l.company, l.role, l.category, l.city, l.phone, l.email, l.website,
+    case when l.linkedin is not null then 'https://www.linkedin.com/in/' || l.linkedin end,
+    case when l.source = 'maps' then 'https://www.google.com/maps/search/?api=1&query=' || replace(l.name || ' ' || l.city, ' ', '+') end,
+    l.met_where,
+    case when l.source = 'upwork' then l.name end,
+    case when l.source = 'upwork' then 'https://www.upwork.com/jobs/~01' || left(md5(l.name), 16) end,
+    l.budget, l.connects, l.proposal_status, l.stage, l.channel, l.priority, l.deal_value, l.won_amount,
+    case when l.stage = 'won' then date_trunc('month', v_today)::date end,
+    v_today + l.fu_in,
+    l.tags
+  from seed_leads l;
+
+  select id into v_emir from seed_leads where name = 'Emir Kovač';
+
+  -- Emir's notes (design/contact.png → Notes card).
+  update public.contacts
+     set notes = (
+       select jsonb_agg(jsonb_build_object('id', gen_random_uuid(), 'body', n.body,
+                        'created_at', ((v_today - n.ago) + time '18:00') at time zone v_tz) order by n.ord)
+       from (values
+         (1, 14, 'Pain: booking page is slow on mobile; customers drop off at the payment step.'),
+         (2, 14, 'Angle: show the Atelier Sara booking rebuild as a case study.'),
+         (3, 3,  'Decision: Emir decides; co-founder Nina owns the budget.'),
+         (4, 3,  'Done: send 2–3 examples.'),
+         (5, 3,  'To do: prepare a mini audit of the booking page.')
+       ) as n(ord, ago, body)
+     )
+   where id = v_emir;
+
+  -- ---------------------------------------------------------------------------
+  -- Touches. Emir: exactly the timeline from design/contact.png.
+  -- ---------------------------------------------------------------------------
+  insert into public.touches (user_id, contact_id, occurred_at, channel, direction, template_id, body, got_reply)
+  values
+    (v_user, v_emir, ((v_today - 14) + time '11:20') at time zone v_tz, 'linkedin', 'note', null,
+      'Found via LinkedIn search for design studios in Sarajevo. Small team. Booking site slow on mobile.', false),
+    (v_user, v_emir, ((v_today - 13) + time '10:03') at time zone v_tz, 'linkedin', 'sent', v_tpl_opener,
+      'Hi Emir, congrats on the new studio launch. I noticed the booking page is slow on mobile. I help studios fix exactly that. Open to a 15-minute call?', false),
+    (v_user, v_emir, ((v_today - 6) + time '09:15') at time zone v_tz, 'linkedin', 'sent', v_tpl_follow1,
+      'Hi Emir, following up on my note from last week. Happy to share a quick audit of your booking page on mobile, no strings attached.', false),
+    (v_user, v_emir, ((v_today - 3) + time '16:42') at time zone v_tz, 'linkedin', 'received', null,
+      'Thanks for reaching out, interesting timing. We are rebuilding our booking flow this winter. Could you send two or three examples of similar work?', true);
+
+  -- Everyone else past "New": one sent message, plus a reply for Replied and later stages.
+  -- (A time later today is pulled back to "now", so nothing is in the future.)
+  insert into public.touches (user_id, contact_id, occurred_at, channel, direction, template_id, body, got_reply)
+  select
+    v_user, l.id,
+    least(((v_today - least(l.touch_ago + case when l.stage = 'contacted' then 0 else 3 end, l.added_ago)) + time '10:15') at time zone v_tz,
+          now() - interval '5 minutes'),
+    coalesce(l.channel, 'other'), 'sent', t.id,
+    coalesce(
+      replace(t.body, '{{first_name}}', case when l.source in ('linkedin', 'inperson') then split_part(l.name, ' ', 1) else 'there' end),
+      'Hi, following up on our chat. Would a short call this week work?'),
+    false
+  from seed_leads l
+  left join public.templates t on t.id = case
+      when l.source = 'linkedin' then v_tpl_opener
+      when l.source = 'upwork' then v_tpl_upwork
+      when 'no-website' = any (l.tags) then v_tpl_nosite
+    end
+  where l.id <> v_emir and l.stage <> 'new'
+  union all
+  select
+    v_user, l.id,
+    least(((v_today - l.touch_ago) + time '15:40') at time zone v_tz, now() - interval '1 minute'),
+    coalesce(l.channel, 'other'), 'received', null,
+    case l.stage
+      when 'replied'  then 'Thanks, sounds interesting. Can you send a few examples of similar work?'
+      when 'meeting'  then 'Sure, let''s talk. Does Thursday at 11 work for a call?'
+      when 'proposal' then 'Thanks for the call. Please send over a proposal with a rough timeline and price.'
+      when 'won'      then 'Let''s do it. Send the contract and the first invoice.'
+      when 'lost'     then 'Thanks, but we''re going with someone else for now.'
+    end,
+    true
+  from seed_leads l
+  where l.id <> v_emir and l.stage not in ('new', 'contacted');
+
+  -- ---------------------------------------------------------------------------
+  -- Stage history. The trigger already wrote one row per lead ("created at its
+  -- current stage"); turn that into "created as New" and add the steps after it,
+  -- spread evenly between created_at and the last touch.
+  -- ---------------------------------------------------------------------------
+  update public.stage_history h
+     set from_stage = null, to_stage = 'new', changed_at = c.created_at
+    from public.contacts c
+   where h.contact_id = c.id and c.user_id = v_user;
+
+  insert into public.stage_history (user_id, contact_id, from_stage, to_stage, changed_at)
+  select v_user, c.id, p.path[i - 1], p.path[i],
+         c.created_at + (coalesce(c.last_touch_at, now()) - c.created_at) * ((i - 1)::float8 / (cardinality(p.path) - 1))
+  from public.contacts c
+  cross join lateral (
+    select case
+      when c.stage = 'lost' then array['new', 'contacted', 'replied', 'lost']
+      else (array['new', 'contacted', 'replied', 'meeting', 'proposal', 'won'])
+             [1:array_position(array['new', 'contacted', 'replied', 'meeting', 'proposal', 'won'], c.stage)]
+    end as path
+  ) as p
+  cross join lateral generate_series(2, cardinality(p.path)) as i
+  where c.user_id = v_user;
+
+  -- ---------------------------------------------------------------------------
+  -- Link the Today seed tasks to their contacts (only if they exist and aren't linked yet).
+  -- ---------------------------------------------------------------------------
+  update public.tasks t
+     set contact_id = l.id
+    from seed_leads l
+   where t.user_id = v_user and t.contact_id is null
+     and ((t.title = 'Follow up with Emir Kovač (Bloom Studio)' and l.name = 'Emir Kovač')
+       or (t.title = 'Send proposal to Lejla Hodžić' and l.name = 'Lejla Hodžić'));
+
+  raise notice 'Outreach demo data added for user %: % contacts, % touches.', v_user,
+    (select count(*) from public.contacts where user_id = v_user),
+    (select count(*) from public.touches where user_id = v_user);
 end;
 $$;

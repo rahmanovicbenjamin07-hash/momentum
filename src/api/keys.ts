@@ -13,6 +13,15 @@
 type IsoDate = string
 
 const today = ['today'] as const
+const outreach = ['outreach'] as const
+
+/** Filters for the contacts list. Only server-side filters belong here; keep it a plain, serialisable object. */
+export type ContactFilters = {
+  source?: 'linkedin' | 'maps' | 'inperson' | 'upwork' | 'other'
+  stage?: 'new' | 'contacted' | 'replied' | 'meeting' | 'proposal' | 'won' | 'lost'
+  search?: string
+  followUpDue?: boolean
+}
 
 export const queryKeys = {
   profile: {
@@ -30,5 +39,17 @@ export const queryKeys = {
     routineChecksAll: () => [...today, 'routineChecks'] as const,
     tasksAll: () => [...today, 'tasks'] as const,
     overdueTasksAll: () => [...today, 'overdueTasks'] as const,
+  },
+  outreach: {
+    all: outreach,
+    contacts: (filters: ContactFilters = {}) => [...outreach, 'contacts', filters] as const,
+    contact: (id: string) => [...outreach, 'contact', id] as const,
+    touches: (contactId: string) => [...outreach, 'touches', contactId] as const,
+    templates: () => [...outreach, 'templates'] as const,
+    /** weekStart = Monday of the week, 'yyyy-MM-dd'. */
+    weekTouches: (weekStart: IsoDate) => [...outreach, 'weekTouches', weekStart] as const,
+    // Prefixes: every cached filter set / week.
+    contactsAll: () => [...outreach, 'contacts'] as const,
+    weekTouchesAll: () => [...outreach, 'weekTouches'] as const,
   },
 } as const
