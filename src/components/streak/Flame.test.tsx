@@ -40,3 +40,13 @@ describe('Flame', () => {
     expect(screen.getByRole('img', { name: 'Inferno streak' })).toBeInTheDocument()
   })
 })
+
+describe('Flame without circle', () => {
+  it('drops the circle and sparkles and zooms in on the flame', () => {
+    const { container } = render(<Flame level="legend" circle={false} size={20} />)
+    expect(part(container, 'circle')).toBeNull()
+    expect(part(container, 'sparkles')).toBeNull()
+    expect(part(container, 'outer')).not.toBeNull()
+    expect(container.querySelector('svg')).toHaveAttribute('viewBox', '20 20 60 60')
+  })
+})

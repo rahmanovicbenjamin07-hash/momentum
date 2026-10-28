@@ -1,7 +1,6 @@
 import {
   CalendarCheck,
   ChartNoAxesColumn,
-  Flame,
   Send,
   SlidersHorizontal,
   Target,
@@ -10,6 +9,7 @@ import {
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { NavLink } from 'react-router'
+import { StreakMini } from '@/components/streak/StreakMini'
 import { cn } from '@/lib/utils'
 
 export type SidebarProps = {
@@ -100,14 +100,8 @@ export function Sidebar({ todayCount, outreachDue, streakDays }: SidebarProps) {
         </ul>
 
         {streakDays !== undefined && (
-          <div className="mt-6 hidden rounded-xl border border-border px-4 py-3 md:block">
-            <p className="flex items-center gap-1.5 text-[13px] font-semibold text-warn">
-              <Flame className="size-4" aria-hidden="true" />
-              Current streak
-            </p>
-            <p className="mt-0.5 text-xl font-semibold text-foreground">
-              {streakDays} {streakDays === 1 ? 'day' : 'days'}
-            </p>
+          <div className="mt-6 hidden md:block">
+            <StreakMini days={streakDays} />
           </div>
         )}
       </nav>

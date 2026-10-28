@@ -8,6 +8,8 @@ type FlameProps = {
   size?: number
   /** Show sparkles around the circle. Defaults to the level's own setting (Inferno and Legend). */
   sparkles?: boolean
+  /** Draw the tinted circle (default). Without it the flame fills the box and sparkles are off — for small icons. */
+  circle?: boolean
   /** Text for screen readers. Leave empty when the text next to the flame already says it. */
   label?: string
   className?: string
@@ -26,20 +28,21 @@ function sparklePath(cx: number, cy: number, r: number) {
 }
 
 /** Three-layer streak flame in a tinted circle. Colours change with the streak level. */
-export function Flame({ level, size = 96, sparkles, label, className }: FlameProps) {
+export function Flame({ level, size = 96, sparkles, circle = true, label, className }: FlameProps) {
   const { colors, sparkles: levelSparkles } = getStreakLevel(level)
-  const showSparkles = sparkles ?? levelSparkles
+  const showSparkles = circle && (sparkles ?? levelSparkles)
 
   return (
     <svg
-      viewBox="0 0 100 100"
+      // Without the circle, zoom in on the flame (it spans roughly 33–67 × 22–78).
+      viewBox={circle ? '0 0 100 100' : '20 20 60 60'}
       width={size}
       height={size}
       className={cn('shrink-0 overflow-visible', className)}
       data-level={level}
       {...(label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true })}
     >
-      <circle cx="50" cy="50" r="50" fill={colors.tint} data-part="circle" />
+      {circle && <circle cx="50" cy="50" r="50" fill={colors.tint} data-part="circle" />}
       <path d={OUTER} fill={colors.outer} data-part="outer" />
       <path d={MIDDLE} fill={colors.middle} data-part="middle" />
       <path d={CORE} fill={colors.core} data-part="core" />

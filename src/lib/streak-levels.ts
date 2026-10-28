@@ -14,6 +14,8 @@ export type StreakLevel = {
     /** Background of the circle behind the flame. */
     tint: string
   }
+  /** Darker shade of the level colour that passes WCAG AA as text on white and on the `core` colour (badges, labels). */
+  textColor: string
   /** Top levels get little sparkles around the circle. */
   sparkles: boolean
 }
@@ -25,6 +27,7 @@ export const STREAK_LEVELS: readonly StreakLevel[] = [
     name: 'Start',
     minDays: 0,
     colors: { outer: '#9CA3AF', middle: '#D1D5DB', core: '#F3F4F6', tint: '#F3F4F6' },
+    textColor: '#374151',
     sparkles: false,
   },
   {
@@ -32,6 +35,7 @@ export const STREAK_LEVELS: readonly StreakLevel[] = [
     name: 'Spark',
     minDays: 1,
     colors: { outer: '#F59E0B', middle: '#FBBF24', core: '#FEF3C7', tint: '#FFFBEB' },
+    textColor: '#92400E',
     sparkles: false,
   },
   {
@@ -39,6 +43,7 @@ export const STREAK_LEVELS: readonly StreakLevel[] = [
     name: 'Flame',
     minDays: 10,
     colors: { outer: '#F97316', middle: '#FB923C', core: '#FED7AA', tint: '#FFF7ED' },
+    textColor: '#9A3412',
     sparkles: false,
   },
   {
@@ -46,6 +51,7 @@ export const STREAK_LEVELS: readonly StreakLevel[] = [
     name: 'Blaze',
     minDays: 30,
     colors: { outer: '#E11D48', middle: '#FB7185', core: '#FFE4E6', tint: '#FFF1F2' },
+    textColor: '#BE123C',
     sparkles: false,
   },
   {
@@ -53,6 +59,7 @@ export const STREAK_LEVELS: readonly StreakLevel[] = [
     name: 'Inferno',
     minDays: 60,
     colors: { outer: '#9333EA', middle: '#C084FC', core: '#F3E8FF', tint: '#FAF5FF' },
+    textColor: '#7E22CE',
     sparkles: true,
   },
   {
@@ -60,6 +67,7 @@ export const STREAK_LEVELS: readonly StreakLevel[] = [
     name: 'Legend',
     minDays: 100,
     colors: { outer: '#2563EB', middle: '#60A5FA', core: '#DBEAFE', tint: '#EFF6FF' },
+    textColor: '#1D4ED8',
     sparkles: true,
   },
 ]

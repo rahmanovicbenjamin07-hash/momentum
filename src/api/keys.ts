@@ -26,5 +26,9 @@ export const queryKeys = {
     tasks: (date: IsoDate) => [...today, 'tasks', date] as const,
     overdueTasks: (todayDate: IsoDate) => [...today, 'overdueTasks', todayDate] as const,
     dailyLog: (date: IsoDate) => [...today, 'dailyLog', date] as const,
+    // Prefixes: match every cached range/date of that kind (for optimistic updates and invalidation).
+    routineChecksAll: () => [...today, 'routineChecks'] as const,
+    tasksAll: () => [...today, 'tasks'] as const,
+    overdueTasksAll: () => [...today, 'overdueTasks'] as const,
   },
 } as const
