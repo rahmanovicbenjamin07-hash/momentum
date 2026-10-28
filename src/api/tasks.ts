@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient, type MutateOptions } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient, type MutateOptions } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useAuth } from '@/app/auth-context'
 import type { DateKey } from '@/lib/dates'
@@ -26,21 +26,42 @@ type Rollback = { snapshot: CacheSnapshot }
 // Queries
 // ===========================================================================
 
+async function fetchTasksForDate(date: DateKey): Promise<Task[]> {
+  const { data, error } = await supabase
+    .from('tasks')
+    .select('*')
+    .eq('due_date', date)
+    .neq('status', 'dropped')
+    .order('position')
+    .order('created_at')
+  if (error) throw error
+  return data as Task[]
+}
+
 /** One-off tasks due on `date` (todo + done; dropped ones are hidden). */
 export function useTasksForDate(date: DateKey) {
   return useQuery({
     queryKey: queryKeys.today.tasks(date),
-    queryFn: async (): Promise<Task[]> => {
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('due_date', date)
-        .neq('status', 'dropped')
-        .order('position')
-        .order('created_at')
-      if (error) throw error
-      return data as Task[]
-    },
+    queryFn: () => fetchTasksForDate(date),
+  })
+}
+
+/**
+ * Tasks for several days (e.g. the 7 days of a week), one cached list per day.
+ * Same keys as useTasksForDate, so optimistic updates reach these lists too.
+ */
+export function useTasksForDates(dates: readonly DateKey[]) {
+  return useQueries({
+    queries: dates.map((date) => ({
+      queryKey: queryKeys.today.tasks(date),
+      queryFn: () => fetchTasksForDate(date),
+    })),
+    combine: (results) => ({
+      data: results.every((r) => r.data !== undefined) ? results.flatMap((r) => r.data ?? []) : undefined,
+      isPending: results.some((r) => r.isPending),
+      isError: results.some((r) => r.isError),
+      refetch: () => Promise.all(results.map((r) => r.refetch())),
+    }),
   })
 }
 
