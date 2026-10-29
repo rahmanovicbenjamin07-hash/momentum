@@ -51,4 +51,18 @@ describe('LoginCard', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Wrong email or password.')
     expect(screen.getByLabelText('Password')).toHaveValue('')
   })
+
+  it('shows and hides the password with the eye button', async () => {
+    const user = userEvent.setup()
+    render(<LoginCard onSignIn={signInFn()} />)
+    const field = screen.getByLabelText('Password')
+
+    await user.type(field, 'secret')
+    await user.click(screen.getByRole('button', { name: 'Show password' }))
+    expect(field).toHaveAttribute('type', 'text')
+    expect(field).toHaveValue('secret')
+
+    await user.click(screen.getByRole('button', { name: 'Hide password' }))
+    expect(field).toHaveAttribute('type', 'password')
+  })
 })
