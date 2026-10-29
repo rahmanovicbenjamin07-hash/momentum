@@ -65,7 +65,7 @@ function seed(): MockDb {
 
 async function openToday(page: Page): Promise<MockDb> {
   await page.clock.setFixedTime(NOW)
-  const db = await mockSupabase(page, seed())
+  const db = await mockSupabase(page, seed(), { now: NOW })
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible()
   return db

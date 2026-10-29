@@ -1,4 +1,16 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
+import { ContactLayout } from '@/components/contact/ContactLayout'
+import { ContactBreadcrumb, ContactSummary } from '@/components/contact/ContactSummary'
+import { DetailsList } from '@/components/contact/DetailsList'
+import { LinkedTasks } from '@/components/contact/LinkedTasks'
+import { LogTouchForm, type LogTouchFormHandle } from '@/components/contact/LogTouchForm'
+import { NotesCard } from '@/components/contact/NotesCard'
+import { StageStepper } from '@/components/contact/StageStepper'
+import { Timeline } from '@/components/contact/Timeline'
+import { WonPanel } from '@/components/contact/WonPanel'
+import { addDays } from '@/lib/dates'
+import { SENT_TOUCH_FOLLOW_UP_DAYS } from '@/lib/outreach'
+import type { Contact, Touch } from '@/schemas/outreach'
 import { toast } from 'sonner'
 import { LoginCard } from '@/components/auth/LoginCard'
 import { EmptyState } from '@/components/EmptyState'
@@ -43,7 +55,11 @@ import { StageCounts } from '@/components/outreach/StageCounts'
 import { StagePill } from '@/components/outreach/StagePill'
 import {
   MOCK_OUTREACH_TODAY,
+  mockContactDetail,
   mockContacts,
+  mockLinkedTasks,
+  mockTouches,
+  mockWonContact,
   mockCsvPreview,
   mockTemplates,
   mockFollowUps,
@@ -353,6 +369,117 @@ function OutreachDialogsDemo() {
   )
 }
 
+/** Whole contact page with local state: click stages (Won shows the deal panel), log touches, tick notes and tasks. */
+function ContactPageDemo({ initial }: { initial: Contact }) {
+  const [contact, setContact] = useState(initial)
+  const [touches, setTouches] = useState<Touch[]>(mockTouches)
+  const [tasks, setTasks] = useState(mockLinkedTasks)
+  const touchForm = useRef<LogTouchFormHandle>(null)
+  const newest = [...touches].sort((a, b) => Date.parse(b.occurred_at) - Date.parse(a.occurred_at))[0] ?? null
+  const wait = () => new Promise((resolve) => setTimeout(resolve, 300))
+
+  return (
+    <ContactLayout
+      header={
+        <>
+          <ContactBreadcrumb name={contact.name} />
+          <ContactSummary
+            contact={contact}
+            onLogTouch={() => touchForm.current?.focusMessage()}
+            onUseTemplate={() => touchForm.current?.focusTemplate()}
+            onAddTask={log('add task')}
+            onEdit={log('edit details')}
+            onMarkLost={() => setContact((c) => ({ ...c, stage: 'lost' }))}
+            onDelete={log('delete lead')}
+          >
+            <StageStepper
+              stage={contact.stage}
+              onChange={(stage) => {
+                setContact((c) => ({ ...c, stage }))
+                log('stage')(stage)
+              }}
+            />
+            {contact.stage === 'won' && (
+              <WonPanel
+                contact={contact}
+                today={MOCK_OUTREACH_TODAY}
+                onSave={async (values) => {
+                  await wait()
+                  setContact((c) => ({ ...c, won_amount: values.amount, won_month: `${values.month}-01` }))
+                  log('deal saved')(values)
+                }}
+              />
+            )}
+          </ContactSummary>
+        </>
+      }
+      aside={
+        <>
+          <DetailsList contact={contact} lastTouch={newest} today={MOCK_OUTREACH_TODAY} />
+          <NotesCard
+            notes={contact.notes}
+            onSave={async (drafts) => {
+              await wait()
+              if (drafts.some((d) => d.body.includes('fail'))) throw new Error("Couldn't save. Check your connection and try again.")
+              const now = new Date().toISOString()
+              setContact((c) => ({
+                ...c,
+                notes: drafts.map((d) => c.notes.find((n) => n.id === d.id && n.body === d.body) ?? {
+                  id: d.id ?? crypto.randomUUID(),
+                  body: d.body,
+                  created_at: c.notes.find((n) => n.id === d.id)?.created_at ?? now,
+                }),
+              }))
+            }}
+          />
+          <LinkedTasks
+            tasks={tasks}
+            today={MOCK_OUTREACH_TODAY}
+            onToggle={(task, done) =>
+              setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: done ? 'done' : 'todo' } : t)))
+            }
+            onAddTask={log('add task')}
+          />
+        </>
+      }
+      main={
+        <>
+          <LogTouchForm
+            ref={touchForm}
+            contactName={contact.name}
+            defaultChannel={contact.channel}
+            templates={mockTemplates}
+            onSubmit={async (values) => {
+              await wait()
+              if (values.body?.includes('fail')) throw new Error("Couldn't save. Check your connection and try again.")
+              const now = new Date().toISOString()
+              setTouches((prev) => [
+                ...prev,
+                {
+                  id: crypto.randomUUID(),
+                  user_id: contact.user_id,
+                  created_at: now,
+                  contact_id: contact.id,
+                  occurred_at: now,
+                  channel: values.channel,
+                  direction: values.direction,
+                  template_id: values.template_id ?? null,
+                  body: values.body ?? null,
+                  got_reply: values.got_reply,
+                },
+              ])
+              if (values.direction === 'sent') {
+                setContact((c) => ({ ...c, next_follow_up: addDays(MOCK_OUTREACH_TODAY, SENT_TOUCH_FOLLOW_UP_DAYS) }))
+              }
+            }}
+          />
+          <Timeline touches={touches} templates={mockTemplates} today={MOCK_OUTREACH_TODAY} />
+        </>
+      }
+    />
+  )
+}
+
 const swatches = [
   ['Page', 'bg-background'],
   ['Card', 'bg-card'],
@@ -512,6 +639,26 @@ export default function DevPreview() {
 
         <Section title="Outreach: PipelineBoard (drag a card; or Tab to a ⋮⋮ grip, Space, ← →, Space)">
           <BoardDemo />
+        </Section>
+
+        <Section title="Contact page (click a stage — Won opens the deal panel; log a touch; tick notes/tasks; 'fail' in a note or message shows an error)">
+          <div className="rounded-xl border border-dashed border-border p-4">
+            <ContactPageDemo initial={mockContactDetail} />
+          </div>
+        </Section>
+
+        <Section title="Contact page: won (design/contact-won.png)">
+          <div className="rounded-xl border border-dashed border-border p-4">
+            <ContactPageDemo initial={mockWonContact} />
+          </div>
+        </Section>
+
+        <Section title="Contact pieces: empty states">
+          <div className="grid gap-4 md:grid-cols-3">
+            <NotesCard notes={[]} onSave={(notes) => void log('notes')(notes)} />
+            <LinkedTasks tasks={[]} today={MOCK_OUTREACH_TODAY} onAddTask={log('add task')} />
+            <Timeline touches={[]} today={MOCK_OUTREACH_TODAY} />
+          </div>
         </Section>
 
         <Section title="Outreach: SourceChip, StagePill, FollowUpText (today = 28 Oct 2026)">

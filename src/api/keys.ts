@@ -50,6 +50,8 @@ export const queryKeys = {
     weekTouches: (weekStart: IsoDate) => [...outreach, 'weekTouches', weekStart] as const,
     // Prefixes: every cached filter set / week.
     contactsAll: () => [...outreach, 'contacts'] as const,
+    contactAll: () => [...outreach, 'contact'] as const,
+    touchesAll: () => [...outreach, 'touches'] as const,
     weekTouchesAll: () => [...outreach, 'weekTouches'] as const,
   },
 } as const

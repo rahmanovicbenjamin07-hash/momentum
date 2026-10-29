@@ -197,6 +197,7 @@ export type Database = {
       }
       contacts: {
         Row: {
+          category: string | null
           channel: string | null
           city: string | null
           company: string | null
@@ -229,6 +230,7 @@ export type Database = {
           won_month: string | null
         }
         Insert: {
+          category?: string | null
           channel?: string | null
           city?: string | null
           company?: string | null
@@ -261,6 +263,7 @@ export type Database = {
           won_month?: string | null
         }
         Update: {
+          category?: string | null
           channel?: string | null
           city?: string | null
           company?: string | null

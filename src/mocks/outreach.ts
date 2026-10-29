@@ -1,8 +1,9 @@
 import type { CsvPreview } from '@/components/outreach/CsvImportDialog'
 import type { LeadSource, LeadStage } from '@/components/outreach/meta'
 import type { TemplateItem } from '@/components/outreach/TemplatesDialog'
+import type { LinkedTask } from '@/components/contact/LinkedTasks'
 import type { DateKey } from '@/lib/dates'
-import type { Contact } from '@/schemas/outreach'
+import type { Contact, Touch } from '@/schemas/outreach'
 
 /** Mock data from design/outreach.png and design/outreach-board.png (today is Wednesday 28 Oct 2026). */
 
@@ -206,6 +207,18 @@ export const mockTemplates: TemplateItem[] = [
     channel: null,
     body: 'Hi {{first_name}}, just bumping this up in case it got buried. Happy to send a short example if that helps.',
   },
+  {
+    id: uuid(104),
+    name: 'Opener A',
+    channel: 'linkedin',
+    body: 'Hi {{first_name}}, congrats on the new studio launch. I noticed the booking page is slow on mobile. I help studios fix exactly that. Open to a 15-minute call?',
+  },
+  {
+    id: uuid(105),
+    name: 'Follow-up #1',
+    channel: 'linkedin',
+    body: 'Hi {{first_name}}, following up on my note from last week. Happy to share a quick audit of your booking page on mobile, no strings attached.',
+  },
 ]
 
 /** What a parsed CSV could look like: some good rows and a few errors. */
@@ -221,3 +234,79 @@ export const mockCsvPreview: CsvPreview = {
     { line: 7, message: 'Unknown source "facebook" (use linkedin, maps, inperson, upwork or other)' },
   ],
 }
+
+// ---------------------------------------------------------------------------
+// Contact page (design/contact.png, design/contact-won.png)
+// ---------------------------------------------------------------------------
+
+const note = (n: number, body: string) => ({ id: uuid(300 + n), body, created_at: '2026-10-14T09:00:00+00:00' })
+
+/** Emir Kovač with everything the contact page shows. */
+export const mockContactDetail: Contact = {
+  ...mockContacts[0]!,
+  created_at: '2026-10-14T09:00:00+00:00',
+  city: 'Sarajevo',
+  email: 'emir.kovac@example.com',
+  phone: '+387 61 000 000',
+  website: 'https://bloom-studio.example',
+  priority: 'high',
+  tags: ['agency', 'warm'],
+  last_touch_at: '2026-10-25T15:42:00+00:00',
+  notes: [
+    note(1, 'Pain: booking page is slow on mobile; customers drop off at the payment step.'),
+    note(2, 'Angle: show the Atelier Sara booking rebuild as a case study.'),
+    note(3, 'Decision: Emir decides; co-founder Nina owns the budget.'),
+    note(4, '[x] Send 2–3 examples'),
+    note(5, '[ ] Prepare a mini audit of the booking page'),
+  ],
+}
+
+/** The same lead after the deal was won. */
+export const mockWonContact: Contact = {
+  ...mockContactDetail,
+  stage: 'won',
+  next_follow_up: null,
+}
+
+const touch = (n: number, fields: Pick<Touch, 'occurred_at' | 'direction' | 'body'> & Partial<Touch>): Touch => ({
+  id: uuid(400 + n),
+  user_id: MOCK_USER_ID,
+  created_at: fields.occurred_at,
+  contact_id: mockContactDetail.id,
+  channel: 'linkedin',
+  template_id: null,
+  got_reply: false,
+  ...fields,
+})
+
+/** Emir's timeline, oldest first (the Timeline sorts newest first itself). */
+export const mockTouches: Touch[] = [
+  touch(1, {
+    occurred_at: '2026-10-14T09:00:00+00:00',
+    direction: 'note',
+    body: 'Found via LinkedIn search for design studios in Sarajevo. Small team. Booking site slow on mobile.',
+  }),
+  touch(2, {
+    occurred_at: '2026-10-15T08:03:00+00:00',
+    direction: 'sent',
+    template_id: uuid(104),
+    body: 'Hi Emir, congrats on the new studio launch. I noticed the booking page is slow on mobile. I help studios fix exactly that. Open to a 15-minute call?',
+  }),
+  touch(3, {
+    occurred_at: '2026-10-22T07:15:00+00:00',
+    direction: 'sent',
+    template_id: uuid(105),
+    body: 'Hi Emir, following up on my note from last week. Happy to share a quick audit of your booking page on mobile, no strings attached.',
+  }),
+  touch(4, {
+    occurred_at: '2026-10-25T15:42:00+00:00',
+    direction: 'received',
+    got_reply: true,
+    body: 'Thanks for reaching out, interesting timing. We are rebuilding our booking flow this winter. Could you send two or three examples of similar work?',
+  }),
+]
+
+export const mockLinkedTasks: LinkedTask[] = [
+  { id: uuid(501), title: 'Follow up with Emir Kovač', due_date: '2026-10-28', time: '10:30:00', status: 'todo' },
+  { id: uuid(502), title: 'Send booking rebuild examples', due_date: '2026-10-26', time: null, status: 'done' },
+]

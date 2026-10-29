@@ -65,8 +65,13 @@ function respond(route: Route, status: number, body?: unknown) {
   })
 }
 
-/** Signs in a fake user and serves `db` as the database. Returns `db`, which changes as the app writes. */
-export async function mockSupabase(page: Page, db: MockDb): Promise<MockDb> {
+/**
+ * Signs in a fake user and serves `db` as the database. Returns `db`, which changes as the app writes.
+ * Pass `now` when the test fixes the browser clock, so server-made timestamps
+ * (created_at, completed_at) match the page's "today" instead of the real date.
+ */
+export async function mockSupabase(page: Page, db: MockDb, options: { now?: Date } = {}): Promise<MockDb> {
+  const nowIso = () => (options.now ?? new Date()).toISOString()
   const session = {
     access_token: 'test-access-token',
     refresh_token: 'test-refresh-token',
@@ -122,7 +127,7 @@ export async function mockSupabase(page: Page, db: MockDb): Promise<MockDb> {
             const row: Row = {
               id: crypto.randomUUID(),
               user_id: TEST_USER.id,
-              created_at: new Date().toISOString(),
+              created_at: nowIso(),
               ...DEFAULTS[table],
               ...input,
             }
@@ -140,7 +145,7 @@ export async function mockSupabase(page: Page, db: MockDb): Promise<MockDb> {
           Object.assign(row, patch)
           // Mirrors the tasks trigger: completed_at follows status.
           if (table === 'tasks' && 'status' in patch) {
-            row.completed_at = patch.status === 'done' ? new Date().toISOString() : null
+            row.completed_at = patch.status === 'done' ? nowIso() : null
           }
         }
         return prefer.includes('return=representation') ? returnRows(targets) : respond(route, 204)
