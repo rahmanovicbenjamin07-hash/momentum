@@ -10,15 +10,17 @@ import {
   useToggleRoutineCheck,
   useUpdateRoutineItem,
 } from '@/api/routine'
+import { useContacts, useUpdateContact } from '@/api/contacts'
 import { useCreateTask, useDropTask, useMoveToToday, useOverdueTasks, useToggleTask } from '@/api/tasks'
 import { keepFocusPlace } from '@/app/keepFocusPlace'
+import { useOutreachWeek } from '@/app/useOutreachWeek'
 import { useTodayData } from '@/app/useTodayData'
 import { EmptyState } from '@/components/EmptyState'
 import { StreakCard } from '@/components/streak/StreakCard'
 import { DailyNoteCard } from '@/components/today/DailyNoteCard'
 import { MissedYesterday } from '@/components/today/MissedYesterday'
 import { OutreachWeekCard } from '@/components/today/OutreachWeekCard'
-import { OverdueBlock } from '@/components/today/OverdueBlock'
+import { OverdueBlock, type OverdueTask } from '@/components/today/OverdueBlock'
 import { ProgressCard } from '@/components/today/ProgressCard'
 import { QuickAddBar } from '@/components/today/QuickAddBar'
 import { ThisWeekCard } from '@/components/today/ThisWeekCard'
@@ -29,9 +31,30 @@ import { Button } from '@/components/ui/button'
 import { addDays, formatDate, isDateKey, type DateKey } from '@/lib/dates'
 import type { QuickAddResult } from '@/lib/quickAddSubmit'
 import { formatDays } from '@/lib/todayList'
+import type { Contact } from '@/schemas/outreach'
+import type { Task } from '@/schemas/today'
 
-/** Outreach arrives in Phase 2; until then the cards show 0 of 20. */
-const OUTREACH_WEEK = { sent: 0, goal: 20, replies: 0 }
+/** A row in the Overdue block: a late task, or a lead whose follow-up date has passed. */
+type OverdueItem = OverdueTask & ({ kind: 'task'; task: Task } | { kind: 'followUp'; contact: Contact })
+
+function overdueItems(tasks: readonly Task[], contacts: readonly Contact[], today: DateKey): OverdueItem[] {
+  const late: OverdueItem[] = tasks.map((task) => ({ ...task, kind: 'task', task }))
+  for (const contact of contacts) {
+    if (contact.stage === 'won' || contact.stage === 'lost' || !contact.next_follow_up) continue
+    if (contact.next_follow_up >= today) continue
+    late.push({
+      kind: 'followUp',
+      contact,
+      id: `follow-up-${contact.id}`,
+      title: `Follow up with ${contact.name}`,
+      due_date: contact.next_follow_up,
+      tag: 'outreach',
+      href: `/outreach/${contact.id}`,
+    })
+  }
+  // Oldest first; the sort is stable, so tasks keep their own order within a day.
+  return late.sort((a, b) => a.due_date.localeCompare(b.due_date))
+}
 
 const DISMISS_KEY = 'momentum:missed-dismissed'
 
@@ -65,6 +88,8 @@ export default function TodayPage() {
   const isToday = selected === today
 
   const overdue = useOverdueTasks(today)
+  const contacts = useContacts()
+  const outreachWeek = useOutreachWeek(today, timeZone)
   const dailyLog = useDailyLog(selected)
 
   const toggleCheck = useToggleRoutineCheck()
@@ -77,6 +102,7 @@ export default function TodayPage() {
   const moveToToday = useMoveToToday()
   const dropTask = useDropTask()
   const saveLog = useSaveDailyLog()
+  const updateContact = useUpdateContact()
 
   const [dismissedMissed, setDismissedMissed] = useState(readDismissed)
   // Main column, so focus can stay in place when a banner, overdue row or routine item goes away.
@@ -152,7 +178,7 @@ export default function TodayPage() {
           <>
             <ProgressCard progress={view.progress} />
             <StreakCard days={view.streak.days} />
-            <OutreachWeekCard {...OUTREACH_WEEK} />
+            <OutreachWeekCard {...outreachWeek} />
           </>
         }
         quickAdd={<QuickAddBar onSubmit={handleQuickAdd} />}
@@ -185,15 +211,29 @@ export default function TodayPage() {
             />
             {isToday && overdue.data && (
               <OverdueBlock
-                tasks={overdue.data}
+                tasks={overdueItems(overdue.data, contacts.data ?? [], today)}
                 today={today}
-                onMoveToToday={(task) => {
+                onMoveToToday={(item) => {
                   keepFocus()
-                  moveToToday.mutate({ task, today }, { onSuccess: () => toast.success('Moved to today') })
+                  if (item.kind === 'task') {
+                    moveToToday.mutate({ task: item.task, today }, { onSuccess: () => toast.success('Moved to today') })
+                  } else {
+                    updateContact.mutate(
+                      { id: item.contact.id, patch: { next_follow_up: today } },
+                      { onSuccess: () => toast.success('Follow-up moved to today') },
+                    )
+                  }
                 }}
-                onDrop={(task) => {
+                onDrop={(item) => {
                   keepFocus()
-                  dropTask.mutate(task.id, { onSuccess: () => toast('Task dropped') })
+                  if (item.kind === 'task') {
+                    dropTask.mutate(item.task.id, { onSuccess: () => toast('Task dropped') })
+                  } else {
+                    updateContact.mutate(
+                      { id: item.contact.id, patch: { next_follow_up: null } },
+                      { onSuccess: () => toast('Follow-up cleared') },
+                    )
+                  }
                 }}
               />
             )}
@@ -216,7 +256,7 @@ export default function TodayPage() {
         }
         aside={
           <>
-            <ThisWeekCard week={view.week} outreach={OUTREACH_WEEK} />
+            <ThisWeekCard week={view.week} outreach={outreachWeek} />
             {dailyLog.isSuccess ? (
               <DailyNoteCard
                 key={selected}

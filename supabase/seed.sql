@@ -4,8 +4,9 @@
 --   * Supabase dashboard → SQL Editor (live project): adds demo data to YOUR account.
 --   * Local stack (`supabase db reset`): there are no users there, so it just skips.
 --
--- Two independent parts: Today (below) and Outreach (second block, matches design/outreach.png
--- and design/contact.png). Each part skips itself if your account already has that kind of data,
+-- Three independent parts: Today (below), Outreach (second block, matches design/outreach.png
+-- and design/contact.png) and My metrics (third block, matches design/progress.png).
+-- Each part skips itself if your account already has that kind of data,
 -- so you can run the whole file again after a new phase is added.
 --
 -- Safe by design:
@@ -431,5 +432,150 @@ begin
   raise notice 'Outreach demo data added for user %: % contacts, % touches.', v_user,
     (select count(*) from public.contacts where user_id = v_user),
     (select count(*) from public.touches where user_id = v_user);
+end;
+$$;
+
+-- =============================================================================
+-- Stats → My metrics demo data (design/progress.png).
+--
+-- What you get (fixed dates: all of 2025, and 2026 up to the end of October):
+--   * The 3 built-in metrics set up as in the screenshot:
+--     Money earned monthly, goal €18,000 · Trainings weekly, goal 150 · Hours worked weekly, goal 1,700 h.
+--   * Money earned: one value per month (dated the 1st).
+--     2026 Jan–Oct = €13,950 (Oct €2,200 "2 new clients"); 2025 = €10,400, of which €8,150 by end of Oct (+71%).
+--   * Trainings: one value per week (Mondays). 2026 up to 26 Oct = 117; 2025 same time = 78 (+50%), full year 96.
+--   * Hours worked: one value per week (Mondays). 2026 up to 26 Oct = 1,371 h; 2025 same time = 1,124 h (+22%).
+--
+-- Skips itself if your account already has metric entries.
+-- Needs the metrics migration (20261029090000_metrics.sql) pushed first.
+-- =============================================================================
+do $$
+declare
+  -- Only needed if the project has more than one user: put your login email here.
+  v_email text := null;
+
+  v_user uuid;
+  v_user_count int;
+  v_money uuid;
+  v_trainings uuid;
+  v_hours uuid;
+  v_monday_2025 constant date := date '2025-01-06';  -- first Monday of 2025
+  v_monday_2026 constant date := date '2026-01-05';  -- first Monday of 2026
+begin
+  -- ---------------------------------------------------------------------------
+  -- Whose account? (same rules as the other parts)
+  -- ---------------------------------------------------------------------------
+  if v_email is not null then
+    select id into v_user from auth.users where lower(email) = lower(v_email);
+    if v_user is null then
+      raise exception 'No user with email %. Check the spelling, or sign in to the app once first.', v_email;
+    end if;
+  else
+    select count(*) into v_user_count from auth.users;
+    if v_user_count = 0 then
+      raise notice 'Metrics seed skipped: no users yet. Sign in to the app once, then run this file again.';
+      return;
+    elsif v_user_count > 1 then
+      raise exception 'This project has % users. Set v_email at the top of every seed block to your login email.', v_user_count;
+    end if;
+    select id into v_user from auth.users;
+  end if;
+
+  if exists (select 1 from public.metric_entries where user_id = v_user) then
+    raise notice 'Metrics seed skipped: this account already has metric entries. Nothing was changed.';
+    return;
+  end if;
+
+  -- ---------------------------------------------------------------------------
+  -- The 3 built-in metrics (the migration already made them; this only re-adds a deleted one),
+  -- then "how often" and yearly goals as in the screenshot.
+  -- ---------------------------------------------------------------------------
+  insert into public.metrics (user_id, name, unit, log_every, builtin, position)
+  values
+    (v_user, 'Money earned', 'eur', 'monthly', 'money_earned', 0),
+    (v_user, 'Trainings', 'count', 'weekly', 'trainings', 1),
+    (v_user, 'Hours worked', 'hours', 'weekly', 'hours_worked', 2)
+  on conflict do nothing;
+
+  update public.metrics m
+     set log_every = d.log_every, yearly_goal = d.goal
+    from (values
+      ('money_earned', 'monthly', 18000),
+      ('trainings',    'weekly',  150),
+      ('hours_worked', 'weekly',  1700)
+    ) as d (builtin, log_every, goal)
+   where m.user_id = v_user and m.builtin = d.builtin;
+
+  select id into v_money     from public.metrics where user_id = v_user and builtin = 'money_earned';
+  select id into v_trainings from public.metrics where user_id = v_user and builtin = 'trainings';
+  select id into v_hours     from public.metrics where user_id = v_user and builtin = 'hours_worked';
+
+  if v_money is null or v_trainings is null or v_hours is null then
+    raise exception 'A built-in metric is missing (is there already a metric with the same name?). Nothing was changed.';
+  end if;
+
+  -- ---------------------------------------------------------------------------
+  -- Money earned: monthly totals.
+  -- ---------------------------------------------------------------------------
+  insert into public.metric_entries (user_id, metric_id, entry_date, value, note)
+  select v_user, v_money, make_date(m.y, m.mon, 1), m.value, m.note
+  from (values
+    (2025,  1,  650, null),
+    (2025,  2,  700, null),
+    (2025,  3,  720, null),
+    (2025,  4,  760, null),
+    (2025,  5,  780, null),
+    (2025,  6,  800, null),
+    (2025,  7,  820, null),
+    (2025,  8,  880, null),
+    (2025,  9,  990, null),
+    (2025, 10, 1050, null),
+    (2025, 11, 1100, null),
+    (2025, 12, 1150, null),
+    (2026,  1,  850, null),
+    (2026,  2,  920, null),
+    (2026,  3, 1100, null),
+    (2026,  4,  980, null),
+    (2026,  5, 1350, 'Raised hourly rate'),
+    (2026,  6, 1500, null),
+    (2026,  7, 1420, null),
+    (2026,  8, 1680, 'Fitbox Gym project'),
+    (2026,  9, 1950, null),
+    (2026, 10, 2200, '2 new clients')
+  ) as m (y, mon, value, note);
+
+  -- ---------------------------------------------------------------------------
+  -- Trainings: weekly counts.
+  --   2025, 52 weeks: mostly 2 a week, 8 lighter weeks of 1 before November.
+  --   2026, 43 weeks (5 Jan – 26 Oct): 2 or 3 a week early on, then 3 a week.
+  -- ---------------------------------------------------------------------------
+  insert into public.metric_entries (user_id, metric_id, entry_date, value)
+  select v_user, v_trainings, v_monday_2025 + 7 * i,
+         case when i < 40 and i % 5 = 0 then 1 else 2 end
+  from generate_series(0, 51) as i;
+
+  insert into public.metric_entries (user_id, metric_id, entry_date, value)
+  select v_user, v_trainings, v_monday_2026 + 7 * i,
+         case when i < 24 and i % 2 = 0 then 2 else 3 end
+  from generate_series(0, 42) as i;
+
+  -- ---------------------------------------------------------------------------
+  -- Hours worked: weekly hours.
+  --   2025: 24–28 h a week up to October (a bit more from late August), 26 h in Nov–Dec.
+  --   2026: 30–34 h a week (28 h in the first week).
+  -- ---------------------------------------------------------------------------
+  insert into public.metric_entries (user_id, metric_id, entry_date, value)
+  select v_user, v_hours, v_monday_2025 + 7 * i,
+         case when i <= 42 then 24 + i % 5 + case when i >= 34 then 1 else 0 end
+              else 26 end
+  from generate_series(0, 51) as i;
+
+  insert into public.metric_entries (user_id, metric_id, entry_date, value)
+  select v_user, v_hours, v_monday_2026 + 7 * i,
+         30 + i % 5 - case when i = 0 then 2 else 0 end
+  from generate_series(0, 42) as i;
+
+  raise notice 'Metrics demo data added for user %: % entries.', v_user,
+    (select count(*) from public.metric_entries where user_id = v_user);
 end;
 $$;

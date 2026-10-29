@@ -68,6 +68,66 @@ import {
   mockStageCounts,
 } from '@/mocks/outreach'
 import { mockSidebar, mockUnreadCount, mockUser } from '@/mocks/shell'
+import { CompletionLineChart } from '@/components/stats/CompletionLineChart'
+import { ConsistencyHeatmap } from '@/components/stats/ConsistencyHeatmap'
+import { FunnelBars } from '@/components/stats/FunnelBars'
+import { KpiCard } from '@/components/stats/KpiCard'
+import type { StatsRange } from '@/components/stats/meta'
+import { RangeToggle } from '@/components/stats/RangeToggle'
+import { ReplyRateBars } from '@/components/stats/ReplyRateBars'
+import { StatsTabs } from '@/components/stats/StatsTabs'
+import { InsightsCard } from '@/components/stats/InsightsCard'
+import { RevenueCard } from '@/components/stats/RevenueCard'
+import { TagBars } from '@/components/stats/TagBars'
+import { TemplatesTable } from '@/components/stats/TemplatesTable'
+import { EntriesTable } from '@/components/metrics/EntriesTable'
+import { LogValueForm } from '@/components/metrics/LogValueForm'
+import { MetricCards } from '@/components/metrics/MetricCards'
+import { MetricChart, type MetricChartMode } from '@/components/metrics/MetricChart'
+import { MetricFacts } from '@/components/metrics/MetricFacts'
+import { NewMetricDialog } from '@/components/metrics/NewMetricDialog'
+import {
+  MOCK_CURRENT_MONTH,
+  MOCK_METRICS_YEAR,
+  mockExisting,
+  mockLogMonths,
+  mockMetricCards,
+  mockMoneyFacts,
+  mockMoneyForecast,
+  mockMoneyGoal,
+  mockMoneyLastYear,
+  mockMoneyMonths,
+} from '@/mocks/metrics'
+import { MissReasonsBars } from '@/components/routine/MissReasonsBars'
+import { MonthTable } from '@/components/routine/MonthTable'
+import { RoutineChart, type RoutineChartMode } from '@/components/routine/RoutineChart'
+import { RoutineFacts } from '@/components/routine/RoutineFacts'
+import { RoutineItemCards } from '@/components/routine/RoutineItemCards'
+import { GoalStatuses } from '@/components/reports/GoalStatuses'
+import { Highlights } from '@/components/reports/Highlights'
+import { KeyNumbers } from '@/components/reports/KeyNumbers'
+import { Lessons } from '@/components/reports/Lessons'
+import { ReportLayout } from '@/components/reports/ReportLayout'
+import { ReportPeriodToggle, type ReportKind } from '@/components/reports/ReportPeriodToggle'
+import { RoutineConsistency } from '@/components/reports/RoutineConsistency'
+import { ShareCard } from '@/components/reports/ShareCard'
+import { mockGoalStatuses, mockLessons, mockMonthReport, mockYearReport } from '@/mocks/reports'
+import { MOCK_ROUTINE_MONTH, MOCK_ROUTINE_YEAR, mockRoutineCards, mockWakeUpStats } from '@/mocks/routine'
+import {
+  MOCK_STATS_TODAY,
+  mockCompletion,
+  mockCompletionWithGaps,
+  mockConsistency,
+  mockConsistencyInsight,
+  mockFunnel,
+  mockInsights,
+  mockKpis,
+  mockReplyRates,
+  mockRevenue,
+  mockStatsSummary,
+  mockTagCounts,
+  mockTemplateStats,
+} from '@/mocks/stats'
 import {
   MOCK_TODAY,
   mockMissedYesterday,
@@ -480,6 +540,156 @@ function ContactPageDemo({ initial }: { initial: Contact }) {
   )
 }
 
+/** Routine progress tab with local state: pick a card, switch chart mode, toggle the perfect year. */
+function RoutineDemo() {
+  const [selected, setSelected] = useState<string | null>('r-wake')
+  const [mode, setMode] = useState<RoutineChartMode>('running')
+  const [showPerfect, setShowPerfect] = useState(true)
+  return (
+    <div className="flex flex-col gap-4">
+      <RoutineItemCards items={mockRoutineCards} selectedId={selected} onSelect={setSelected} />
+      <RoutineChart
+        title="Wake up at 06:00 · Mon–Fri"
+        year={MOCK_ROUTINE_YEAR}
+        months={mockWakeUpStats.months}
+        perfectLine={mockWakeUpStats.perfectLine}
+        forecast={mockWakeUpStats.forecast?.line ?? null}
+        mode={mode}
+        onModeChange={setMode}
+        showPerfect={showPerfect}
+        onShowPerfectChange={setShowPerfect}
+      />
+      <RoutineFacts stats={mockWakeUpStats} currentMonth={MOCK_ROUTINE_MONTH} />
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
+        <div className="self-start">
+          <MissReasonsBars reasons={mockWakeUpStats.missReasons} pattern={mockWakeUpStats.missWeekday?.sentence} />
+        </div>
+        <MonthTable months={mockWakeUpStats.months} />
+      </div>
+    </div>
+  )
+}
+
+/** Reports tab: Month / Year toggle, Download PDF (prints), Share image (logs), and the report. */
+function ReportsDemo() {
+  const [kind, setKind] = useState<ReportKind>('month')
+  const report = kind === 'month' ? mockMonthReport : mockYearReport
+  return (
+    <>
+      <PageHeader
+        eyebrow="Made automatically at the end of every month and year"
+        title="Stats"
+        actions={
+          <>
+            <ReportPeriodToggle value={kind} monthLabel="October 2026" yearLabel="2026 so far" onChange={setKind} />
+            <Button variant="outline" className="bg-card print:hidden" onClick={() => window.print()}>
+              Download PDF
+            </Button>
+            <Button className="print:hidden" onClick={log('share image')}>
+              Share image
+            </Button>
+          </>
+        }
+      />
+      <ReportLayout
+        share={<ShareCard share={report.share} />}
+        highlights={<Highlights highlights={report.highlights} />}
+        keyNumbers={<KeyNumbers numbers={report.keyNumbers} previousLabel={report.previousLabel} />}
+        routine={<RoutineConsistency routine={report.routine} />}
+        goals={<GoalStatuses goals={mockGoalStatuses} />}
+        lessons={<Lessons lessons={mockLessons} />}
+      />
+    </>
+  )
+}
+
+/** My metrics tab with local state: pick a card, switch chart mode, compare, new metric, log a value. */
+function MetricsDemo() {
+  const [selected, setSelected] = useState<string | null>('m-money')
+  const [mode, setMode] = useState<MetricChartMode>('running')
+  const [compare, setCompare] = useState(true)
+  const [newOpen, setNewOpen] = useState(false)
+  const wait = () => new Promise((resolve) => setTimeout(resolve, 300))
+
+  return (
+    <div className="flex flex-col gap-4">
+      <MetricCards metrics={mockMetricCards} selectedId={selected} onSelect={setSelected} onNew={() => setNewOpen(true)} />
+      <MetricChart
+        name="Money earned"
+        year={MOCK_METRICS_YEAR}
+        unit="eur"
+        months={mockMoneyMonths}
+        lastYear={mockMoneyLastYear}
+        forecast={mockMoneyForecast}
+        goal={mockMoneyGoal}
+        mode={mode}
+        onModeChange={setMode}
+        compare={compare}
+        onCompareChange={setCompare}
+      />
+      <MetricFacts facts={mockMoneyFacts} />
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
+        <div className="self-start">
+          <LogValueForm
+            unit="eur"
+            months={mockLogMonths}
+            defaultMonth={MOCK_CURRENT_MONTH}
+            existing={mockExisting}
+            onSubmit={async (values) => {
+              await wait()
+              if (values.note?.includes('fail')) throw new Error("Couldn't save. Check your connection and try again.")
+              log('entry saved')(values)
+            }}
+          />
+        </div>
+        <EntriesTable rows={mockMoneyMonths} unit="eur" />
+      </div>
+      <NewMetricDialog
+        open={newOpen}
+        onOpenChange={setNewOpen}
+        onSubmit={async (values) => {
+          await wait()
+          log('metric created')(values)
+          setNewOpen(false)
+        }}
+      />
+    </div>
+  )
+}
+
+/** Stats page top: summary line, title, range toggle, Export CSV, tabs and the six KPI cards. */
+function StatsHeaderDemo() {
+  const [range, setRange] = useState<StatsRange>(30)
+  return (
+    <>
+      <PageHeader
+        eyebrow={mockStatsSummary.replace('30', String(range))}
+        title="Stats"
+        actions={
+          <>
+            <RangeToggle
+              value={range}
+              onChange={(value) => {
+                setRange(value)
+                log('range')(value)
+              }}
+            />
+            <Button variant="outline" className="bg-card" onClick={log('export CSV')}>
+              Export CSV
+            </Button>
+          </>
+        }
+      />
+      <StatsTabs search={`?range=${range}`} />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        {mockKpis.map((kpi) => (
+          <KpiCard key={kpi.label} {...kpi} />
+        ))}
+      </div>
+    </>
+  )
+}
+
 const swatches = [
   ['Page', 'bg-background'],
   ['Card', 'bg-card'],
@@ -683,6 +893,114 @@ export default function DevPreview() {
                 </div>
               ))}
             </dl>
+          </div>
+        </Section>
+
+        <Section title="Stats: header, tabs, range toggle, KPI cards (tabs are real links)">
+          <div className="rounded-xl border border-dashed border-border p-4">
+            <StatsHeaderDemo />
+          </div>
+        </Section>
+
+        <Section title="Stats: charts (hover the line, or Tab to it and use ← → Home End; hover heatmap squares)">
+          <div className="flex flex-col gap-4">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+              <CompletionLineChart points={mockCompletion} />
+              <ConsistencyHeatmap
+                days={mockConsistency}
+                today={MOCK_STATS_TODAY}
+                insight={
+                  <>
+                    <strong className="font-semibold">Insight:</strong> {mockConsistencyInsight}
+                  </>
+                }
+              />
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <FunnelBars steps={mockFunnel} caption="Last 30 days" />
+              <ReplyRateBars rows={mockReplyRates} />
+            </div>
+          </div>
+        </Section>
+
+        <Section title="Stats: insights, revenue, templates table, completed by tag">
+          <div className="flex flex-col gap-4">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <InsightsCard insights={mockInsights} />
+              <RevenueCard {...mockRevenue} />
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+              <TemplatesTable templates={mockTemplateStats} onManage={log('manage templates')} />
+              <TagBars tags={mockTagCounts} />
+            </div>
+            <div className="grid gap-4 lg:grid-cols-4">
+              <InsightsCard insights={[]} />
+              <RevenueCard total={0} deals={0} perMessage={null} byChannel={[]} byTemplate={[]} />
+              <TemplatesTable templates={[]} />
+              <TagBars tags={[]} />
+            </div>
+          </div>
+        </Section>
+
+        <Section title="My metrics (click cards, switch Running total / Per month, hover or Tab + ← → on the chart, pick a logged month in the form, 'fail' in the note shows an error)">
+          <div className="rounded-xl border border-dashed border-border p-4">
+            <MetricsDemo />
+          </div>
+        </Section>
+
+        <Section title="Routine progress (click cards, Running total / Per month, Show perfect year, hover or Tab + ← → on the chart)">
+          <div className="rounded-xl border border-dashed border-border p-4">
+            <RoutineDemo />
+          </div>
+        </Section>
+
+        <Section title="Routine progress: empty states">
+          <div className="grid gap-4 lg:grid-cols-3">
+            <RoutineItemCards items={[]} selectedId={null} onSelect={log('select')} />
+            <MissReasonsBars reasons={[]} />
+            <MonthTable months={[]} />
+          </div>
+        </Section>
+
+        <Section title="Reports (switch October 2026 / 2026 so far; Download PDF opens the print preview with only the report)">
+          <div className="rounded-xl border border-dashed border-border p-4">
+            <ReportsDemo />
+          </div>
+        </Section>
+
+        <Section title="Reports: before Goals exist, and empty lists">
+          <div className="grid gap-4 lg:grid-cols-3">
+            <GoalStatuses />
+            <Lessons lessons={[]} />
+            <Highlights highlights={[]} />
+          </div>
+        </Section>
+
+        <Section title="My metrics: empty states">
+          <div className="grid gap-4 lg:grid-cols-2">
+            <MetricChart
+              name="Books read"
+              year={MOCK_METRICS_YEAR}
+              unit="count"
+              months={[]}
+              lastYear={[]}
+              forecast={null}
+              goal={null}
+              mode="running"
+              onModeChange={log('mode')}
+              compare={false}
+              onCompareChange={log('compare')}
+            />
+            <EntriesTable rows={[]} unit="count" />
+          </div>
+        </Section>
+
+        <Section title="Stats: chart edge cases (days with nothing planned, empty data)">
+          <div className="grid gap-4 lg:grid-cols-2">
+            <CompletionLineChart points={mockCompletionWithGaps} title="Completion with gaps" />
+            <CompletionLineChart points={[]} />
+            <FunnelBars steps={[]} />
+            <ReplyRateBars rows={[]} />
           </div>
         </Section>
 

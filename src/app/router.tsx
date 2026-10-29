@@ -4,7 +4,7 @@ import GoalsPage from '@/pages/GoalsPage'
 import ImprovePage from '@/pages/ImprovePage'
 import LoginPage from '@/pages/LoginPage'
 import NotFoundPage from '@/pages/NotFoundPage'
-import OutreachDetailPage from '@/pages/OutreachDetailPage'
+import ContactPage from '@/pages/ContactPage'
 import OutreachPage from '@/pages/OutreachPage'
 import SettingsPage from '@/pages/SettingsPage'
 import StatsPage from '@/pages/StatsPage'
@@ -38,7 +38,7 @@ export const routes: RouteObject[] = [
             children: [
               { index: true, element: <TodayPage /> },
               { path: 'outreach', element: <OutreachPage /> },
-              { path: 'outreach/:id', element: <OutreachDetailPage /> },
+              { path: 'outreach/:id', element: <ContactPage /> },
               {
                 path: 'stats',
                 element: <StatsPage />,

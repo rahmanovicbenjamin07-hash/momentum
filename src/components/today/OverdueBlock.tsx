@@ -1,11 +1,15 @@
 import { useId } from 'react'
+import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import type { DateKey } from '@/lib/dates'
 import { formatOverdue } from '@/lib/overdue'
 import { tagLabel } from '@/lib/today-list'
 import type { Task } from '@/schemas/today'
 
-export type OverdueTask = Pick<Task, 'id' | 'title' | 'due_date' | 'tag'>
+export type OverdueTask = Pick<Task, 'id' | 'title' | 'due_date' | 'tag'> & {
+  /** Makes the title a link, e.g. to the lead of a follow-up. */
+  href?: string
+}
 
 type OverdueBlockProps<T extends OverdueTask> = {
   /** Unfinished one-off tasks from earlier days. Nothing shows when empty. */
@@ -37,7 +41,16 @@ export function OverdueBlock<T extends OverdueTask>({ tasks, today, onMoveToToda
           <li key={task.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-1.5">
             <div className="min-w-0 flex-1 basis-48">
               <p id={`${titleId}-${task.id}`} className="text-[15px] break-words text-foreground">
-                {task.title}
+                {task.href ? (
+                  <Link
+                    to={task.href}
+                    className="rounded-sm outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+                  >
+                    {task.title}
+                  </Link>
+                ) : (
+                  task.title
+                )}
               </p>
               <p className="text-[13px] text-ink-2">
                 {formatOverdue(task.due_date, today)}

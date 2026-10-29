@@ -1,4 +1,4 @@
-// Hand-written to match supabase/migrations (up to 20261028200000_outreach) until the project is linked.
+// Hand-written to match supabase/migrations (up to 20261029090100_stats_views) until the project is linked.
 // Regenerate with: npm run db:types
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
@@ -416,9 +416,175 @@ export type Database = {
         }
         Relationships: []
       }
+      metrics: {
+        Row: {
+          builtin: string | null
+          created_at: string
+          id: string
+          log_every: string
+          name: string
+          position: number
+          unit: string
+          user_id: string
+          yearly_goal: number | null
+        }
+        Insert: {
+          builtin?: string | null
+          created_at?: string
+          id?: string
+          log_every?: string
+          name: string
+          position?: number
+          unit?: string
+          user_id?: string
+          yearly_goal?: number | null
+        }
+        Update: {
+          builtin?: string | null
+          created_at?: string
+          id?: string
+          log_every?: string
+          name?: string
+          position?: number
+          unit?: string
+          user_id?: string
+          yearly_goal?: number | null
+        }
+        Relationships: []
+      }
+      metric_entries: {
+        Row: {
+          contact_id: string | null
+          created_at: string
+          entry_date: string
+          id: string
+          metric_id: string
+          note: string | null
+          user_id: string
+          value: number
+        }
+        Insert: {
+          contact_id?: string | null
+          created_at?: string
+          entry_date?: string
+          id?: string
+          metric_id: string
+          note?: string | null
+          user_id?: string
+          value: number
+        }
+        Update: {
+          contact_id?: string | null
+          created_at?: string
+          entry_date?: string
+          id?: string
+          metric_id?: string
+          note?: string | null
+          user_id?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'metric_entries_metric_fkey'
+            columns: ['metric_id', 'user_id']
+            isOneToOne: false
+            referencedRelation: 'metrics'
+            referencedColumns: ['id', 'user_id']
+          },
+          {
+            foreignKeyName: 'metric_entries_contact_fkey'
+            columns: ['contact_id', 'user_id']
+            isOneToOne: false
+            referencedRelation: 'contacts'
+            referencedColumns: ['id', 'user_id']
+          },
+        ]
+      }
     }
-    Views: { [_ in never]: never }
-    Functions: { [_ in never]: never }
+    Views: {
+      contact_outreach_facts: {
+        Row: {
+          channel: string | null
+          contact_id: string | null
+          first_contacted_on: string | null
+          furthest_step: number | null
+          source: string | null
+          stage: string | null
+          template_id: string | null
+          user_id: string | null
+          won_amount: number | null
+          won_on: string | null
+        }
+        Relationships: []
+      }
+    }
+    Functions: {
+      my_time_zone: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      stats_daily_completion: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          day: string
+          tasks_done: number
+          tasks_total: number
+          routine_done: number
+          routine_total: number
+          done: number
+          total: number
+          percent: number | null
+        }[]
+      }
+      stats_outreach_funnel: {
+        Args: { p_from?: string | null; p_to?: string | null }
+        Returns: {
+          stage: string
+          step: number
+          contacts: number
+          pct_of_previous: number | null
+        }[]
+      }
+      stats_reply_rates: {
+        Args: { p_from?: string | null; p_to?: string | null }
+        Returns: {
+          dimension: string
+          key: string | null
+          label: string | null
+          sent: number
+          replies: number
+          rate: number
+        }[]
+      }
+      stats_revenue: {
+        Args: { p_from?: string | null; p_to?: string | null }
+        Returns: {
+          dimension: string
+          key: string | null
+          label: string | null
+          deals: number
+          amount: number
+        }[]
+      }
+      stats_tasks_by_tag: {
+        Args: { p_from?: string | null; p_to?: string | null }
+        Returns: {
+          tag: string | null
+          done: number
+        }[]
+      }
+      stats_routine_days: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          routine_item_id: string
+          title: string
+          day: string
+          scheduled: boolean
+          done: boolean
+          miss_reason: string | null
+        }[]
+      }
+    }
     Enums: { [_ in never]: never }
     CompositeTypes: { [_ in never]: never }
   }

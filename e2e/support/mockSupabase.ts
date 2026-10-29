@@ -2,7 +2,7 @@ import type { Page, Route } from '@playwright/test'
 
 /**
  * A tiny in-memory stand-in for Supabase, so e2e tests run without a real project.
- * Supports what the app uses: GET with eq/neq/lt/gte/lte filters, insert, upsert and update.
+ * Supports what the app uses: GET with eq/neq/lt/gte/lte/is filters, insert, upsert, update and delete.
  * It does NOT check security (RLS); that is tested against the real database.
  */
 
@@ -20,6 +20,45 @@ const DEFAULTS: Record<string, Row> = {
   routine_checks: { done: false, miss_reason: null },
   tasks: { notes: null, time: null, tag: null, priority: 'medium', status: 'todo', completed_at: null, position: 0, contact_id: null },
   daily_logs: { note: null, energy: null },
+  contacts: {
+    company: null,
+    role: null,
+    category: null,
+    city: null,
+    phone: null,
+    email: null,
+    website: null,
+    linkedin_url: null,
+    maps_url: null,
+    met_where: null,
+    upwork_job_title: null,
+    upwork_job_url: null,
+    upwork_budget: null,
+    connects_spent: null,
+    proposal_status: null,
+    stage: 'new',
+    channel: null,
+    priority: 'medium',
+    deal_value: null,
+    won_amount: null,
+    won_month: null,
+    next_follow_up: null,
+    last_touch_at: null,
+    lost_reason: null,
+    notes: [],
+    tags: [],
+  },
+  touches: { template_id: null, body: null, got_reply: false },
+  templates: { channel: null },
+}
+
+/** Mirrors the touches trigger: a sent/received touch updates the contact's last_touch_at. */
+function afterInsert(db: MockDb, table: string, row: Row) {
+  if (table !== 'touches' || row.direction === 'note') return
+  const contact = db.contacts?.find((c) => c.id === row.contact_id)
+  if (contact && (!contact.last_touch_at || String(row.occurred_at) > String(contact.last_touch_at))) {
+    contact.last_touch_at = row.occurred_at
+  }
 }
 
 function matches(row: Row, column: string, filter: string): boolean {
@@ -40,6 +79,8 @@ function matches(row: Row, column: string, filter: string): boolean {
       return actual > expected
     case 'gte':
       return actual >= expected
+    case 'is':
+      return actual === expected
     default:
       throw new Error(`mockSupabase: unsupported filter ${column}=${filter}`)
   }
@@ -133,6 +174,7 @@ export async function mockSupabase(page: Page, db: MockDb, options: { now?: Date
             }
             rows.push(row)
             written.push(row)
+            afterInsert(db, table, row)
           }
         }
         return prefer.includes('return=representation') ? returnRows(written) : respond(route, 201)
@@ -149,6 +191,12 @@ export async function mockSupabase(page: Page, db: MockDb, options: { now?: Date
           }
         }
         return prefer.includes('return=representation') ? returnRows(targets) : respond(route, 204)
+      }
+
+      case 'DELETE': {
+        const targets = new Set(filterRows(rows, params))
+        db[table] = rows.filter((row) => !targets.has(row))
+        return prefer.includes('return=representation') ? returnRows([...targets]) : respond(route, 204)
       }
 
       default:

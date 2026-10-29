@@ -4,6 +4,7 @@ import { useProfile } from '@/api/profile'
 import { AppShell } from '@/components/layout/AppShell'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from './auth-context'
+import { useFollowUpsDue } from './useOutreachWeek'
 import { useTodayData } from './useTodayData'
 
 export default function AppLayout() {
@@ -11,7 +12,8 @@ export default function AppLayout() {
   const navigate = useNavigate()
   const { data: profile } = useProfile(user?.id)
   // Sidebar: open items today (badge) and the current streak. Shares the cache with the Today page.
-  const { view: todayView } = useTodayData()
+  const { view: todayView, today } = useTodayData()
+  const outreachDue = useFollowUpsDue(today)
 
   async function signOut() {
     // 'local' signs out this browser only, so your phone stays signed in.
@@ -32,7 +34,7 @@ export default function AppLayout() {
         onNotifications: () => toast('No notifications yet.'),
         onSignOut: () => void signOut(),
       }}
-      sidebar={{ todayCount: todayView?.openToday, streakDays: todayView?.streak.days }}
+      sidebar={{ todayCount: todayView?.openToday, outreachDue, streakDays: todayView?.streak.days }}
     >
       <Outlet />
     </AppShell>

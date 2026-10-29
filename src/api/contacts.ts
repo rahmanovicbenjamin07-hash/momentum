@@ -207,6 +207,29 @@ export function useCreateContact() {
   }
 }
 
+/** Rows per insert request when importing, so a big file doesn't hit request size limits. */
+export const IMPORT_CHUNK_SIZE = 500
+
+/**
+ * Adds many leads at once (CSV import). Not optimistic: the list refreshes
+ * when it's done. Resolves with how many were added.
+ */
+export function useImportContacts() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: pipelineMutationKey,
+    mutationFn: async (rows: readonly TablesInsert<'contacts'>[]): Promise<number> => {
+      for (let i = 0; i < rows.length; i += IMPORT_CHUNK_SIZE) {
+        const { error } = await supabase.from('contacts').insert(rows.slice(i, i + IMPORT_CHUNK_SIZE).map((r) => ({ ...r })))
+        if (error) throw error
+      }
+      return rows.length
+    },
+    onError: () => toast.error("Couldn't import the leads. Try again."),
+    onSettled: () => invalidateWhenIdle(queryClient, pipelineMutationKey, contactsPrefix),
+  })
+}
+
 /** Shared by update / set stage: optimistic over every cached copy of the contact. */
 function useContactPatch<TInput extends { id: string }>(toPatch: (input: TInput) => ContactPatch, errorMessage: string) {
   const queryClient = useQueryClient()

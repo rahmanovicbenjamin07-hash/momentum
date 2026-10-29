@@ -14,6 +14,7 @@ type IsoDate = string
 
 const today = ['today'] as const
 const outreach = ['outreach'] as const
+const stats = ['stats'] as const
 
 /** Filters for the contacts list. Only server-side filters belong here; keep it a plain, serialisable object. */
 export type ContactFilters = {
@@ -35,6 +36,8 @@ export const queryKeys = {
     tasks: (date: IsoDate) => [...today, 'tasks', date] as const,
     overdueTasks: (todayDate: IsoDate) => [...today, 'overdueTasks', todayDate] as const,
     dailyLog: (date: IsoDate) => [...today, 'dailyLog', date] as const,
+    /** Tasks linked to a lead (contact page). Under 'tasks', so task writes refresh it too. */
+    contactTasks: (contactId: string) => [...today, 'tasks', 'contact', contactId] as const,
     // Prefixes: match every cached range/date of that kind (for optimistic updates and invalidation).
     routineChecksAll: () => [...today, 'routineChecks'] as const,
     tasksAll: () => [...today, 'tasks'] as const,
@@ -53,5 +56,24 @@ export const queryKeys = {
     contactAll: () => [...outreach, 'contact'] as const,
     touchesAll: () => [...outreach, 'touches'] as const,
     weekTouchesAll: () => [...outreach, 'weekTouches'] as const,
+  },
+  /**
+   * Stats page. Range args are 'yyyy-MM-dd' (both days included); null = no limit (all time).
+   * Any task / routine / outreach / metric write can change these, so invalidate `stats.all`.
+   */
+  stats: {
+    all: stats,
+    metrics: () => [...stats, 'metrics'] as const,
+    /** years = calendar years loaded, sorted, e.g. [2025, 2026]. */
+    metricEntries: (metricId: string, years: readonly number[]) =>
+      [...stats, 'metricEntries', metricId, years] as const,
+    dailyCompletion: (from: IsoDate, to: IsoDate) => [...stats, 'dailyCompletion', from, to] as const,
+    outreachFunnel: (from: IsoDate | null, to: IsoDate | null) => [...stats, 'outreachFunnel', from, to] as const,
+    replyRates: (from: IsoDate | null, to: IsoDate | null) => [...stats, 'replyRates', from, to] as const,
+    revenue: (from: IsoDate | null, to: IsoDate | null) => [...stats, 'revenue', from, to] as const,
+    tasksByTag: (from: IsoDate | null, to: IsoDate | null) => [...stats, 'tasksByTag', from, to] as const,
+    routineDays: (from: IsoDate, to: IsoDate) => [...stats, 'routineDays', from, to] as const,
+    // Prefix: every cached metric's entries.
+    metricEntriesAll: () => [...stats, 'metricEntries'] as const,
   },
 } as const

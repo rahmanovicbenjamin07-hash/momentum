@@ -14,6 +14,8 @@ type OutreachHeaderProps = {
   onViewChange: (view: OutreachView) => void
   onTemplates: () => void
   onImportCsv: () => void
+  /** Downloads every lead as a CSV file. Button hidden without it. */
+  onExportCsv?: () => void
   onAddLead: () => void
 }
 
@@ -35,6 +37,7 @@ export function OutreachHeader({
   onViewChange,
   onTemplates,
   onImportCsv,
+  onExportCsv,
   onAddLead,
 }: OutreachHeaderProps) {
   const summary = [
@@ -74,6 +77,11 @@ export function OutreachHeader({
           <Button variant="outline" className="bg-card" onClick={onImportCsv}>
             Import CSV
           </Button>
+          {onExportCsv && (
+            <Button variant="outline" className="bg-card" onClick={onExportCsv}>
+              Export CSV
+            </Button>
+          )}
           <Button onClick={onAddLead}>
             <Plus aria-hidden="true" />
             Add lead

@@ -65,6 +65,25 @@ export function useTasksForDates(dates: readonly DateKey[]) {
   })
 }
 
+/** Tasks linked to a lead (todo + done; dropped ones are hidden), by due date. */
+export function useContactTasks(contactId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.today.contactTasks(contactId ?? 'none'),
+    queryFn: async (): Promise<Task[]> => {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('contact_id', contactId as string)
+        .neq('status', 'dropped')
+        .order('due_date')
+        .order('time', { nullsFirst: false })
+      if (error) throw error
+      return data as Task[]
+    },
+    enabled: Boolean(contactId),
+  })
+}
+
 /** Unfinished tasks from days before `today`, oldest first. */
 export function useOverdueTasks(today: DateKey) {
   return useQuery({
@@ -111,7 +130,7 @@ export function buildTask(input: NewTask, ids: { id: string; userId: string; pos
     status: 'todo',
     completed_at: null,
     position: ids.position,
-    contact_id: null,
+    contact_id: input.contactId ?? null,
   }
 }
 
@@ -128,6 +147,8 @@ export type NewTask = {
   tag?: string | null
   priority?: Priority
   notes?: string | null
+  /** Links the task to a lead (shows under "Linked tasks"). */
+  contactId?: string | null
 }
 
 /** Adds a one-off task. It shows in the list instantly; rolls back with a toast if saving fails. */
@@ -147,6 +168,7 @@ export function useCreateTask() {
         tag: task.tag,
         priority: task.priority,
         position: task.position,
+        contact_id: task.contact_id,
       })
       if (error) throw error
     },
@@ -155,7 +177,10 @@ export function useCreateTask() {
         ...list,
         task,
       ])
-      return { snapshot }
+      const linked = task.contact_id
+        ? await patchCachedLists<Task>(queryClient, queryKeys.today.contactTasks(task.contact_id), (list) => [...list, task])
+        : []
+      return { snapshot: [...snapshot, ...linked] }
     },
     onError: (_error, _task, context) => {
       restoreCache(queryClient, context?.snapshot)
@@ -198,7 +223,8 @@ function useTaskMutation<TInput>(config: {
     onMutate: async (input: TInput): Promise<Rollback> => {
       const { tasks, overdue } = config.apply(input)
       const a = await patchCachedLists<Task>(queryClient, tasksPrefix, (list, key) =>
-        tasks(list, typeof key[2] === 'string' ? key[2] : undefined),
+        // A lead's task list (['today','tasks','contact',id]) isn't one day's list, so it gets no date.
+        tasks(list, typeof key[2] === 'string' && key[2] !== 'contact' ? key[2] : undefined),
       )
       const b = await patchCachedLists<Task>(queryClient, overduePrefix, overdue)
       return { snapshot: [...a, ...b] }
@@ -241,6 +267,7 @@ export function useMoveToToday() {
     save: ({ task, today }: MoveToTodayInput) => updateTask(task.id, { due_date: today }),
     apply: ({ task, today }) => ({
       tasks: (list, date) => {
+        if (date === undefined) return patchTask(list, task.id, { due_date: today })
         if (date !== today) return withoutTask(list, task.id)
         return list.some((t) => t.id === task.id) ? list : [...list, { ...task, due_date: today }]
       },
