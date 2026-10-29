@@ -15,8 +15,8 @@ export type StageFilterValue = LeadStage | 'all'
 const SOURCE_STYLE: Record<LeadSource, { icon: LucideIcon; className: string }> = {
   linkedin: { icon: Briefcase, className: 'bg-info-tint text-info' },
   maps: { icon: MapPin, className: 'bg-good-tint text-good' },
-  inperson: { icon: Users, className: 'bg-[#F3E8FF] text-[#7E22CE]' },
-  upwork: { icon: Laptop, className: 'bg-[#ECFCCB] text-[#3F6212]' },
+  inperson: { icon: Users, className: 'bg-tag-purple-tint text-tag-purple' },
+  upwork: { icon: Laptop, className: 'bg-tag-lime-tint text-tag-lime' },
   other: { icon: CircleDot, className: 'bg-muted text-ink-2' },
 }
 
@@ -30,7 +30,7 @@ export const STAGE_META: Record<LeadStage, { label: string; className: string }>
   contacted: { label: 'Contacted', className: 'bg-info-tint text-info' },
   replied: { label: 'Replied', className: 'bg-brand-tint text-brand' },
   meeting: { label: 'Meeting booked', className: 'bg-warn-tint text-warn' },
-  proposal: { label: 'Proposal', className: 'bg-[#FCE7F3] text-[#BE185D]' },
+  proposal: { label: 'Proposal', className: 'bg-tag-pink-tint text-tag-pink' },
   won: { label: 'Won', className: 'bg-good-tint text-good' },
   lost: { label: 'Lost', className: 'bg-bad-tint text-bad' },
 }

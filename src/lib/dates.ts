@@ -72,15 +72,19 @@ export function dayIndex(key: DateKey): number {
   return (sundayFirst + 6) % 7
 }
 
-/** The Monday of the week that contains this day. */
-export function weekStart(key: DateKey): DateKey {
-  return addDays(key, -dayIndex(key))
+/** Which day a week starts on: 1 = Monday (the default), 0 = Sunday. Same values as profiles.week_start. */
+export type WeekStartsOn = 0 | 1
+
+/** The first day of the week that contains this day (Monday, or Sunday with weekStartsOn 0). */
+export function weekStart(key: DateKey, weekStartsOn: WeekStartsOn = 1): DateKey {
+  const back = weekStartsOn === 1 ? dayIndex(key) : (dayIndex(key) + 1) % 7
+  return addDays(key, -back)
 }
 
-/** All 7 days (Mon → Sun) of the week that contains this day. */
-export function weekDays(key: DateKey): DateKey[] {
-  const monday = weekStart(key)
-  return Array.from({ length: 7 }, (_, i) => addDays(monday, i))
+/** All 7 days of the week that contains this day (Mon → Sun, or Sun → Sat with weekStartsOn 0). */
+export function weekDays(key: DateKey, weekStartsOn: WeekStartsOn = 1): DateKey[] {
+  const first = weekStart(key, weekStartsOn)
+  return Array.from({ length: 7 }, (_, i) => addDays(first, i))
 }
 
 /** A DateKey as a local Date at midnight, only for passing to date-fns `format`. */

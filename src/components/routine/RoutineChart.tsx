@@ -27,7 +27,7 @@ type RoutineChartProps = {
 
 const HEIGHT = 320
 const PAD = { top: 14, right: 16, bottom: 28, left: 60 }
-const PERFECT = '#9CA3AF'
+const PERFECT = CHART.muted
 const MODES: { value: RoutineChartMode; label: string }[] = [
   { value: 'running', label: 'Running total' },
   { value: 'monthly', label: 'Per month' },

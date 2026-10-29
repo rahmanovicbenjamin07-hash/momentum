@@ -58,7 +58,7 @@ export function RoutineItemCards({ items, selectedId, onSelect }: RoutineItemCar
                 value={(item.rate ?? 0) * 100}
                 label={`${item.title}: share of scheduled days done`}
                 className="mt-3"
-                trackColor="#EEF0F4"
+                trackColor="var(--chart-track)"
               />
               <span className="mt-2 text-xs text-ink-2">{item.missed} missed so far this year</span>
             </button>

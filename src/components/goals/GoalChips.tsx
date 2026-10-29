@@ -61,7 +61,7 @@ export function GoalChips({ goals, selectedId, onSelect }: GoalChipsProps) {
             className={cn(
               'inline-flex h-10 shrink-0 items-center gap-2 rounded-lg border px-3.5 text-sm font-semibold whitespace-nowrap',
               'focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none',
-              selected ? 'border-foreground bg-foreground text-white' : 'border-border bg-card text-foreground hover:bg-muted',
+              selected ? 'border-foreground bg-foreground text-background' : 'border-border bg-card text-foreground hover:bg-muted',
             )}
           >
             <span aria-hidden className={cn('size-2 rounded-full', dot)} />

@@ -143,6 +143,51 @@ export type Database = {
         }
         Relationships: []
       }
+      experiments: {
+        Row: {
+          before_value: number | null
+          created_at: string
+          during_value: number | null
+          end_date: string
+          hypothesis: string
+          id: string
+          metric: string
+          result: string
+          start_date: string
+          status: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          before_value?: number | null
+          created_at?: string
+          during_value?: number | null
+          end_date: string
+          hypothesis?: string
+          id?: string
+          metric?: string
+          result?: string
+          start_date?: string
+          status?: string
+          title: string
+          user_id?: string
+        }
+        Update: {
+          before_value?: number | null
+          created_at?: string
+          during_value?: number | null
+          end_date?: string
+          hypothesis?: string
+          id?: string
+          metric?: string
+          result?: string
+          start_date?: string
+          status?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       goals: {
         Row: {
           created_at: string
@@ -184,6 +229,54 @@ export type Database = {
           target?: number
           title?: string
           type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ideas: {
+        Row: {
+          created_at: string
+          id: string
+          status: string
+          text: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          status?: string
+          text: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          status?: string
+          text?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      lessons: {
+        Row: {
+          area: string
+          created_at: string
+          id: string
+          text: string
+          user_id: string
+        }
+        Insert: {
+          area?: string
+          created_at?: string
+          id?: string
+          text: string
+          user_id?: string
+        }
+        Update: {
+          area?: string
+          created_at?: string
+          id?: string
+          text?: string
           user_id?: string
         }
         Relationships: []
@@ -279,8 +372,75 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_prefs: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          id: string
+          key: string
+          time: string | null
+          time_end: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          key: string
+          time?: string | null
+          time_end?: string | null
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          key?: string
+          time?: string | null
+          time_end?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          body: string
+          created_at: string
+          dedupe_key: string
+          id: string
+          kind: string
+          link: string | null
+          read_at: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body?: string
+          created_at?: string
+          dedupe_key: string
+          id?: string
+          kind: string
+          link?: string | null
+          read_at?: string | null
+          title: string
+          user_id?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          dedupe_key?: string
+          id?: string
+          kind?: string
+          link?: string | null
+          read_at?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
+          backup_enabled: boolean
           created_at: string
           day_end_hour: number
           display_name: string | null
@@ -290,8 +450,10 @@ export type Database = {
           timezone: string
           user_id: string
           week_start: number
+          weekly_targets: Json
         }
         Insert: {
+          backup_enabled?: boolean
           created_at?: string
           day_end_hour?: number
           display_name?: string | null
@@ -301,8 +463,10 @@ export type Database = {
           timezone?: string
           user_id?: string
           week_start?: number
+          weekly_targets?: Json
         }
         Update: {
+          backup_enabled?: boolean
           created_at?: string
           day_end_hour?: number
           display_name?: string | null
@@ -312,6 +476,46 @@ export type Database = {
           timezone?: string
           user_id?: string
           week_start?: number
+          weekly_targets?: Json
+        }
+        Relationships: []
+      }
+      reviews: {
+        Row: {
+          created_at: string
+          focus: string
+          id: string
+          lesson: string
+          misses: string
+          stats_snapshot: Json
+          status: string
+          user_id: string
+          week_start: string
+          wins: string
+        }
+        Insert: {
+          created_at?: string
+          focus?: string
+          id?: string
+          lesson?: string
+          misses?: string
+          stats_snapshot: Json
+          status?: string
+          user_id?: string
+          week_start: string
+          wins?: string
+        }
+        Update: {
+          created_at?: string
+          focus?: string
+          id?: string
+          lesson?: string
+          misses?: string
+          stats_snapshot?: Json
+          status?: string
+          user_id?: string
+          week_start?: string
+          wins?: string
         }
         Relationships: []
       }
@@ -601,7 +805,13 @@ export type Database = {
       }
     }
     Functions: {
+      create_default_notification_prefs: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
+      generate_notifications: { Args: never; Returns: number }
       my_time_zone: { Args: never; Returns: string }
+      restore_user_data: { Args: { p_tables: Json }; Returns: Json }
       stats_daily_completion: {
         Args: { p_from: string; p_to: string }
         Returns: {

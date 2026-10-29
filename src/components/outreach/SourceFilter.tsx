@@ -33,7 +33,7 @@ export function SourceFilter({ counts, value, onChange }: SourceFilterProps) {
             onClick={() => onChange(option)}
             className={cn(
               'inline-flex h-10 items-center gap-2 rounded-lg border px-3.5 text-sm font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
-              selected ? 'border-foreground bg-foreground text-white' : 'border-border bg-card text-foreground hover:bg-muted',
+              selected ? 'border-foreground bg-foreground text-background' : 'border-border bg-card text-foreground hover:bg-muted',
             )}
           >
             <Icon aria-hidden="true" className="size-4 shrink-0" />
@@ -41,7 +41,7 @@ export function SourceFilter({ counts, value, onChange }: SourceFilterProps) {
             <span
               className={cn(
                 'rounded-md px-1.5 text-xs font-medium tabular-nums',
-                selected ? 'bg-white/20 text-white' : 'bg-muted text-ink-2',
+                selected ? 'bg-background/20 text-background' : 'bg-muted text-ink-2',
               )}
             >
               {count}

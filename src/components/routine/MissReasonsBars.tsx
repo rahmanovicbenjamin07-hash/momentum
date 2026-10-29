@@ -9,9 +9,9 @@ type MissReasonsBarsProps = {
   pattern?: string | null
 }
 
-const TOP = '#B45309'
-const OTHER = '#F59E0B'
-const UNANSWERED = '#D1D5DB'
+const TOP = 'var(--warn)'
+const OTHER = 'var(--chart-amber-soft)'
+const UNANSWERED = 'var(--chart-empty)'
 
 /** "Why you missed it": missed days by the reason picked on Today, plus a pattern sentence. */
 export function MissReasonsBars({ reasons, pattern }: MissReasonsBarsProps) {

@@ -1,5 +1,5 @@
 import { SOURCES, STAGES, type Contact, type Source, type Stage, type Touch } from '@/schemas/outreach'
-import { addDays, DEFAULT_TIME_ZONE, toDateKey, weekStart, type DateKey } from './dates'
+import { addDays, DEFAULT_TIME_ZONE, toDateKey, weekStart, type DateKey, type WeekStartsOn } from './dates'
 import { followUpState } from './outreach'
 
 /** Today's "Outreaches this week" target. */
@@ -127,15 +127,16 @@ export function filterContacts<C extends FilterableContact>(
 // ---------------------------------------------------------------------------
 
 /**
- * Sent touches in the week (Mon–Sun) that contains `today`, by the user's
+ * Sent touches in the week (Mon–Sun, or Sun–Sat with weekStartsOn 0) that contains `today`, by the user's
  * local calendar day. Received messages and notes don't count.
  */
 export function weekOutreachCount(
   touches: readonly Pick<Touch, 'direction' | 'occurred_at'>[],
   today: DateKey,
   timeZone: string = DEFAULT_TIME_ZONE,
+  weekStartsOn: WeekStartsOn = 1,
 ): number {
-  const monday = weekStart(today)
+  const monday = weekStart(today, weekStartsOn)
   const sunday = addDays(monday, 6)
   let count = 0
   for (const t of touches) {

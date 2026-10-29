@@ -169,17 +169,17 @@ export function CompletionLineChart({ points, title = 'Task completion per day' 
                 strokeLinecap="round"
               />
               {endIndex >= 0 && active === null && (
-                <circle cx={x(endIndex)} cy={y(points[endIndex]!.average!)} r={4} fill={CHART.strong} stroke="white" strokeWidth={2} />
+                <circle cx={x(endIndex)} cy={y(points[endIndex]!.average!)} r={4} fill={CHART.strong} stroke={CHART.halo} strokeWidth={2} />
               )}
 
               {activePoint && active !== null && (
                 <g>
                   <line x1={x(active)} x2={x(active)} y1={PAD.top} y2={PAD.top + plotH} stroke={CHART.crosshair} strokeWidth={1} />
                   {activePoint.daily !== null && (
-                    <circle cx={x(active)} cy={y(activePoint.daily)} r={4} fill={CHART.soft} stroke="white" strokeWidth={2} />
+                    <circle cx={x(active)} cy={y(activePoint.daily)} r={4} fill={CHART.soft} stroke={CHART.halo} strokeWidth={2} />
                   )}
                   {activePoint.average !== null && (
-                    <circle cx={x(active)} cy={y(activePoint.average)} r={4} fill={CHART.strong} stroke="white" strokeWidth={2} />
+                    <circle cx={x(active)} cy={y(activePoint.average)} r={4} fill={CHART.strong} stroke={CHART.halo} strokeWidth={2} />
                   )}
                 </g>
               )}

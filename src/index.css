@@ -3,7 +3,7 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* Momentum design tokens (see CLAUDE.md → Design tokens). */
 @theme inline {
@@ -50,6 +50,39 @@
   --color-bad-tint: var(--bad-tint);
   --color-info: var(--info);
   --color-info-tint: var(--info-tint);
+  /* Solid fills under white text (same in both themes). */
+  --color-good-strong: var(--good-strong);
+  --color-bad-strong: var(--bad-strong);
+  --color-warn-line: var(--warn-line);
+  /* Slightly darker than the page, e.g. pipeline columns. */
+  --color-sunken: var(--sunken);
+
+  /* Top bar (dark in both themes). */
+  --color-topbar-button-hover: var(--topbar-button-hover);
+  --color-topbar-field: var(--topbar-field);
+  --color-topbar-line: var(--topbar-line);
+  --color-topbar-line-strong: var(--topbar-line-strong);
+  --color-topbar-text: var(--topbar-text);
+  --color-topbar-muted: var(--topbar-muted);
+  --color-topbar-focus: var(--topbar-focus);
+  --color-notify: var(--notify);
+
+  /* Extra chip colours (lead sources, stages, tags). */
+  --color-tag-purple: var(--tag-purple);
+  --color-tag-purple-tint: var(--tag-purple-tint);
+  --color-tag-lime: var(--tag-lime);
+  --color-tag-lime-tint: var(--tag-lime-tint);
+  --color-tag-pink: var(--tag-pink);
+  --color-tag-pink-tint: var(--tag-pink-tint);
+
+  /* This-week day strip steps. */
+  --color-week-mid: var(--week-mid);
+  --color-week-mid-text: var(--week-mid-text);
+  --color-week-top: var(--week-top);
+  --color-week-top-text: var(--week-top-text);
+
+  /* Charts (most are used as var(--chart-…) in SVG; see stats/chartTheme.ts). */
+  --color-chart-amber: var(--chart-amber);
 
   /* Radii: buttons/inputs/chips use rounded-lg (8px), cards rounded-xl (10px). */
   --radius-sm: 4px;
@@ -103,32 +136,142 @@
   --bad-tint: #fee2e2;
   --info: #075985;
   --info-tint: #e0f2fe;
+
+  /* Accent used as text (links, active tabs). Same as --brand in light. */
+  --brand-text: #4338ca;
+  --good-strong: #15803d;
+  --bad-strong: #b91c1c;
+  --warn-line: #fcd34d;
+  --sunken: #eceef2;
+
+  --topbar-button-hover: #4338ca;
+  --topbar-field: #1f2937;
+  --topbar-line: #374151;
+  --topbar-line-strong: #4b5563;
+  --topbar-text: #d1d5db;
+  --topbar-muted: #9ca3af;
+  --topbar-focus: #6366f1;
+  --notify: #f97316;
+
+  --tag-purple: #7e22ce;
+  --tag-purple-tint: #f3e8ff;
+  --tag-lime: #3f6212;
+  --tag-lime-tint: #ecfccb;
+  --tag-pink: #be185d;
+  --tag-pink-tint: #fce7f3;
+
+  --week-mid: #c7d2fe;
+  --week-mid-text: #312e81;
+  --week-top: #312e81;
+  --week-top-text: #ffffff;
+
+  --chart-strong: #4338ca;
+  --chart-soft: #8b93f8;
+  --chart-faded: #a5b4fc;
+  --chart-track: #eef0f4;
+  --chart-grid: #e5e7eb;
+  --chart-grid-faint: #f3f4f6;
+  --chart-muted: #9ca3af;
+  --chart-amber: #d97706;
+  --chart-amber-soft: #f59e0b;
+  --chart-empty: #d1d5db;
+  /* Heatmap: index 0 = nothing done; light → dark means more done. */
+  --heat-0: #eef0f4;
+  --heat-1: #9aa5fa;
+  --heat-2: #6f74f0;
+  --heat-3: #4338ca;
+  --heat-4: #272369;
+
+  color-scheme: light;
 }
 
-/* Dark theme is a later phase; these keep shadcn components readable if .dark is set. */
+/* Dark theme: put class "dark" on <html>. The top bar keeps its light-theme colours. */
 .dark {
-  --background: #0b0f19;
-  --foreground: #f9fafb;
-  --card: #111827;
-  --card-foreground: #f9fafb;
-  --popover: #111827;
-  --popover-foreground: #f9fafb;
-  --primary: #818cf8;
-  --primary-foreground: #111827;
-  --secondary: #1f2937;
-  --secondary-foreground: #f9fafb;
-  --muted: #1f2937;
-  --muted-foreground: #9ca3af;
-  --accent: #1e1b4b;
-  --accent-foreground: #f9fafb;
+  --background: #0b0f17;
+  --foreground: #f3f4f6;
+  --card: #151b26;
+  --card-foreground: #f3f4f6;
+  --popover: #151b26;
+  --popover-foreground: #f3f4f6;
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --secondary: #1c2331;
+  --secondary-foreground: #f3f4f6;
+  --muted: #1c2331;
+  --muted-foreground: #a3aec2;
+  --accent: #1e2140;
+  --accent-foreground: #f3f4f6;
   --destructive: #f87171;
-  --border: #1f2937;
-  --input: #374151;
+  --border: #263041;
+  --input: #3a4559;
   --ring: #818cf8;
-  --ink-2: #d1d5db;
-  --ink-3: #9ca3af;
-  --brand: #818cf8;
-  --brand-tint: #1e1b4b;
+
+  --chart-1: #818cf8;
+  --chart-2: #6366f1;
+  --chart-3: #3f4396;
+  --chart-4: #4ade80;
+  --chart-5: #fbbf24;
+
+  --ink-2: #a3aec2;
+  --ink-3: #8b96ab;
+  --brand: #4f46e5;
+  /* #4F46E5 is too dark to read as text on dark cards, so accent text is lighter. */
+  --brand-text: #818cf8;
+  --brand-tint: #1e2140;
+  --good: #4ade80;
+  --good-tint: #052e1a;
+  --warn: #fbbf24;
+  --warn-tint: #3a2a05;
+  --bad: #f87171;
+  --bad-tint: #3b0d0d;
+  --info: #38bdf8;
+  --info-tint: #082f49;
+
+  --warn-line: #6b4e0a;
+  --sunken: #0f141d;
+
+  --tag-purple: #d8b4fe;
+  --tag-purple-tint: #2e1065;
+  --tag-lime: #bef264;
+  --tag-lime-tint: #1a2e05;
+  --tag-pink: #f9a8d4;
+  --tag-pink-tint: #500724;
+
+  /* In dark, brighter = more done. */
+  --week-mid: #2e2a6e;
+  --week-mid-text: #c7d2fe;
+  --week-top: #a5b4fc;
+  --week-top-text: #111827;
+
+  --chart-strong: #a5b4fc;
+  --chart-soft: #6366f1;
+  --chart-faded: #3f4396;
+  --chart-track: #222b3a;
+  --chart-grid: #263041;
+  --chart-grid-faint: #1c2331;
+  --chart-muted: #64708a;
+  --chart-amber: #fbbf24;
+  --chart-amber-soft: #a16207;
+  --chart-empty: #3a4559;
+  --heat-0: #222b3a;
+  --heat-1: #312e81;
+  --heat-2: #4338ca;
+  --heat-3: #6366f1;
+  --heat-4: #a5b4fc;
+
+  color-scheme: dark;
+}
+
+/*
+ * text-brand / text-primary read --brand-text instead of the fill colour, so accent
+ * text stays readable in dark mode. In the utilities layer and after Tailwind's own
+ * rules, so hover:/data-… variants on the same element still win.
+ */
+@layer utilities {
+  .text-brand,
+  .text-primary {
+    color: var(--brand-text);
+  }
 }
 
 @layer base {

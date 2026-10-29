@@ -1,4 +1,5 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { Moon, Sun } from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ContactLayout } from '@/components/contact/ContactLayout'
 import { ContactBreadcrumb, ContactSummary } from '@/components/contact/ContactSummary'
 import { DetailsList } from '@/components/contact/DetailsList'
@@ -67,7 +68,9 @@ import {
   mockSourceCounts,
   mockStageCounts,
 } from '@/mocks/outreach'
-import { mockSidebar, mockUnreadCount, mockUser } from '@/mocks/shell'
+import { mockSidebar, mockUser } from '@/mocks/shell'
+import { mockNotifications } from '@/mocks/notifications'
+import type { NotificationItem } from '@/components/notifications/NotificationsPanel'
 import { CompletionLineChart } from '@/components/stats/CompletionLineChart'
 import { ConsistencyHeatmap } from '@/components/stats/ConsistencyHeatmap'
 import { FunnelBars } from '@/components/stats/FunnelBars'
@@ -132,6 +135,44 @@ import {
   mockPipelineDeals,
   mockPipelineTotal,
 } from '@/mocks/goals'
+import { AiSummaryCard } from '@/components/improve/AiSummaryCard'
+import { ExperimentsList } from '@/components/improve/ExperimentsList'
+import { IdeasList } from '@/components/improve/IdeasList'
+import { ImproveHeader } from '@/components/improve/ImproveHeader'
+import { ImproveLayout } from '@/components/improve/ImproveLayout'
+import { ImproveTabs } from '@/components/improve/ImproveTabs'
+import { improvePanelId, improveTabId, type ImproveTab } from '@/components/improve/meta'
+import { PastReviews } from '@/components/improve/PastReviews'
+import { ReviewCard, type ReviewTexts } from '@/components/improve/ReviewCard'
+import { RunningExperimentCard } from '@/components/improve/RunningExperimentCard'
+import { WeeklyGoalsCard } from '@/components/improve/WeeklyGoalsCard'
+import { LessonsList } from '@/components/improve/LessonsList'
+import type { ReviewStatus } from '@/schemas/improve'
+import {
+  MOCK_IMPROVE_TODAY,
+  mockExperiments,
+  mockIdeas,
+  mockImproveLessons,
+  mockPastReviews,
+  mockReview,
+  mockReviewWeekLabel,
+  mockRunningExperiment,
+  mockWeeklyGoals,
+} from '@/mocks/improve'
+import { AppearanceSettings } from '@/components/settings/AppearanceSettings'
+import { DataSettings } from '@/components/settings/DataSettings'
+import { IntegrationsSettings } from '@/components/settings/IntegrationsSettings'
+import { NotificationsSettings, type NotificationChange } from '@/components/settings/NotificationsSettings'
+import { SettingsHeader } from '@/components/settings/SettingsHeader'
+import { SettingsTabs } from '@/components/settings/SettingsTabs'
+import {
+  mockAppearance,
+  mockBackupEnabled,
+  mockBackups,
+  mockNotificationMaster,
+  mockNotificationRows,
+  mockQuietHours,
+} from '@/mocks/settings'
 import {
   MOCK_STATS_TODAY,
   mockCompletion,
@@ -829,6 +870,272 @@ function StatsHeaderDemo() {
   )
 }
 
+/** Whole Improvements page with local state: switch tabs, edit and save the review, add/delete lessons, experiments, ideas. */
+function ImproveDemo() {
+  const [tab, setTab] = useState<ImproveTab>('review')
+  const [texts, setTexts] = useState<ReviewTexts>({
+    wins: mockReview.wins,
+    misses: mockReview.misses,
+    lesson: mockReview.lesson,
+    focus: mockReview.focus,
+  })
+  const [status, setStatus] = useState<ReviewStatus>(mockReview.status)
+  const [saving, setSaving] = useState(false)
+  const [lessons, setLessons] = useState(mockImproveLessons)
+  const [experiments, setExperiments] = useState(mockExperiments)
+  const [ideas, setIdeas] = useState(mockIdeas)
+  const wait = () => new Promise((resolve) => setTimeout(resolve, 300))
+  const row = () => ({ id: crypto.randomUUID(), user_id: mockReview.user_id, created_at: new Date().toISOString() })
+  const failIf = (text: string) => {
+    if (text.includes('fail')) throw new Error("Couldn't save. Check your connection and try again.")
+  }
+
+  const main =
+    tab === 'review' ? (
+      <>
+        <ReviewCard
+          weekLabel={mockReviewWeekLabel}
+          status={status}
+          numbers={mockReview.stats_snapshot}
+          values={texts}
+          onPrevWeek={log('previous week')}
+          onNextWeek={log('next week')}
+          onChange={(values) => {
+            setTexts(values)
+            setStatus('draft')
+          }}
+          onSave={(values) => {
+            setSaving(true)
+            setTimeout(() => {
+              setSaving(false)
+              setStatus('saved')
+              log('review saved')(values)
+            }, 400)
+          }}
+          onFocusToExperiment={(focus) => {
+            setTab('experiments')
+            log('focus → experiment')(focus)
+          }}
+          saving={saving}
+        />
+        <PastReviews items={mockPastReviews.map((item) => ({ ...item, onOpen: () => log('open review')(item.weekLabel) }))} />
+      </>
+    ) : tab === 'lessons' ? (
+      <LessonsList
+        lessons={lessons}
+        onAdd={async (values) => {
+          await wait()
+          failIf(values.text)
+          setLessons((prev) => [{ ...row(), ...values }, ...prev])
+        }}
+        onDelete={(lesson) => setLessons((prev) => prev.filter((l) => l.id !== lesson.id))}
+      />
+    ) : tab === 'experiments' ? (
+      <ExperimentsList
+        experiments={experiments}
+        today={MOCK_IMPROVE_TODAY}
+        onAdd={async (values) => {
+          await wait()
+          failIf(values.title)
+          setExperiments((prev) => [
+            { ...row(), ...values, status: 'running', before_value: null, during_value: null, result: '' },
+            ...prev,
+          ])
+        }}
+        onSetStatus={(experiment, next) =>
+          setExperiments((prev) => prev.map((e) => (e.id === experiment.id ? { ...e, status: next } : e)))
+        }
+        onDelete={(experiment) => setExperiments((prev) => prev.filter((e) => e.id !== experiment.id))}
+      />
+    ) : (
+      <IdeasList
+        ideas={ideas}
+        onAdd={async (values) => {
+          await wait()
+          failIf(values.text)
+          setIdeas((prev) => [{ ...row(), ...values, status: 'new' }, ...prev])
+        }}
+        onMakeTask={(idea) => log('make task')(idea.text)}
+        onTestIt={(idea) => {
+          setIdeas((prev) => prev.map((i) => (i.id === idea.id ? { ...i, status: 'testing' } : i)))
+          log('test it')(idea.text)
+        }}
+        onSetStatus={(idea, next) => setIdeas((prev) => prev.map((i) => (i.id === idea.id ? { ...i, status: next } : i)))}
+        onDelete={(idea) => setIdeas((prev) => prev.filter((i) => i.id !== idea.id))}
+      />
+    )
+
+  return (
+    <>
+      <ImproveHeader onNewReview={log('new review')} />
+      <ImproveTabs
+        active={tab}
+        counts={{ lessons: lessons.length, experiments: experiments.length, ideas: ideas.length }}
+        onChange={setTab}
+      />
+      <div role="tabpanel" id={improvePanelId(tab)} aria-labelledby={improveTabId(tab)}>
+        <ImproveLayout
+          main={main}
+          aside={
+            <>
+              <RunningExperimentCard {...mockRunningExperiment} />
+              <WeeklyGoalsCard rows={mockWeeklyGoals} onEdit={log('edit weekly goals')} />
+              <AiSummaryCard />
+            </>
+          }
+        />
+      </div>
+    </>
+  )
+}
+
+/** Whole Settings page with local state: switches, times, theme, selects, backups and both dialogs. */
+function SettingsDemo() {
+  const [master, setMaster] = useState(mockNotificationMaster)
+  const [rows, setRows] = useState(mockNotificationRows)
+  const [quiet, setQuiet] = useState(mockQuietHours)
+  const [appearance, setAppearance] = useState(mockAppearance)
+  const [backupEnabled, setBackupEnabled] = useState(mockBackupEnabled)
+  const [showBackups, setShowBackups] = useState(true)
+  const wait = () => new Promise((resolve) => setTimeout(resolve, 400))
+
+  const changeNotification = (change: NotificationChange) => {
+    log('notification')(change)
+    if (change.key === 'master') {
+      setMaster(change.enabled ?? master)
+    } else if (change.key === 'quiet_hours') {
+      setQuiet((q) => ({
+        enabled: change.enabled ?? q.enabled,
+        start: change.time !== undefined ? change.time : q.start,
+        end: change.time_end !== undefined ? change.time_end : q.end,
+      }))
+    } else {
+      setRows((prev) =>
+        prev.map((r) =>
+          r.key === change.key
+            ? { ...r, enabled: change.enabled ?? r.enabled, time: change.time !== undefined ? change.time : r.time }
+            : r,
+        ),
+      )
+    }
+  }
+
+  return (
+    <>
+      <SettingsHeader />
+      <SettingsTabs />
+      <div className="flex flex-col gap-5">
+        <NotificationsSettings master={master} rows={rows} quietHours={quiet} onChange={changeNotification} />
+        <AppearanceSettings
+          theme={appearance.theme}
+          weekStart={appearance.weekStart}
+          dayEndHour={appearance.dayEndHour}
+          language={appearance.language}
+          onChange={(change) => {
+            log('appearance')(change)
+            setAppearance((a) => ({
+              ...a,
+              theme: change.theme ?? a.theme,
+              weekStart: change.week_start ?? a.weekStart,
+              dayEndHour: change.day_end_hour ?? a.dayEndHour,
+            }))
+          }}
+        />
+        <DataSettings
+          backupEnabled={backupEnabled}
+          backups={showBackups ? mockBackups : []}
+          onExportCsv={log('export CSV')}
+          onExportJson={log('export JSON')}
+          onImportCsv={log('import CSV')}
+          onToggleBackup={(enabled) => {
+            setBackupEnabled(enabled)
+            log('daily backup')(enabled)
+          }}
+          onRestore={async (path) => {
+            await wait()
+            if (path.includes('10-26')) throw new Error("Couldn't restore that backup. Try again in a minute.")
+            log('restored')(path)
+          }}
+          onDeleteAccount={async () => {
+            await wait()
+            log('account deleted')()
+          }}
+        />
+        <IntegrationsSettings />
+        <Button variant="outline" className="w-fit bg-card" onClick={() => setShowBackups((v) => !v)}>
+          {showBackups ? 'Show the no-backups state' : 'Show the backups again'}
+        </Button>
+      </div>
+    </>
+  )
+}
+
+/** Top bar with a working bell panel: read state is local, "Clear all" shows the empty state. */
+function TopBarDemo() {
+  const [open, setOpen] = useState(false)
+  const [items, setItems] = useState<NotificationItem[]>(mockNotifications)
+  const unread = items.filter((i) => i.read_at === null).length
+  const now = () => new Date().toISOString()
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Room under the bar so the open panel isn't cut off. */}
+      <div className="min-h-[540px] rounded-xl border border-border bg-background">
+        <TopBar
+          user={mockUser}
+          unreadCount={unread}
+          onSearch={log('search')}
+          onNew={log('new')}
+          onNotifications={() => setOpen((v) => !v)}
+          onSignOut={log('sign out')}
+          notificationsPanel={
+            open
+              ? {
+                  items,
+                  onMarkAllRead: () => setItems((prev) => prev.map((i) => ({ ...i, read_at: i.read_at ?? now() }))),
+                  onOpen: (item) => {
+                    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, read_at: i.read_at ?? now() } : i)))
+                    setOpen(false)
+                    log('open')(item.link)
+                  },
+                  onClose: () => setOpen(false),
+                }
+              : undefined
+          }
+        />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" className="bg-card" onClick={() => setItems([])}>
+          Clear all (empty state)
+        </Button>
+        <Button variant="outline" className="bg-card" onClick={() => setItems(mockNotifications)}>
+          Reset notifications
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/** Fixed "Dark" switch for /dev: puts class "dark" on <html>, removed again when leaving /dev. */
+function DarkToggle() {
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark)
+    return () => document.documentElement.classList.remove('dark')
+  }, [dark])
+  return (
+    <Button
+      variant="outline"
+      aria-pressed={dark}
+      onClick={() => setDark((v) => !v)}
+      className="fixed right-4 bottom-4 z-40 bg-card aria-pressed:border-brand aria-pressed:text-brand"
+    >
+      {dark ? <Moon aria-hidden="true" /> : <Sun aria-hidden="true" />}
+      Dark
+    </Button>
+  )
+}
+
 const swatches = [
   ['Page', 'bg-background'],
   ['Card', 'bg-card'],
@@ -850,18 +1157,10 @@ export default function DevPreview() {
     <div className="min-h-svh bg-background">
       <div className="mx-auto max-w-[1200px] px-4 py-8 md:px-8">
         <PageHeader eyebrow="Development only" title="Component preview" />
+        <DarkToggle />
 
-        <Section title="TopBar">
-          <div className="overflow-hidden rounded-xl border border-border">
-            <TopBar
-              user={mockUser}
-              unreadCount={mockUnreadCount}
-              onSearch={log('search')}
-              onNew={log('new')}
-              onNotifications={log('notifications')}
-              onSignOut={log('sign out')}
-            />
-          </div>
+        <Section title="TopBar + bell panel (click the bell; Escape or a click outside closes it; open a row to mark it read)">
+          <TopBarDemo />
         </Section>
 
         <Section title="Sidebar (with badges and streak / empty)">
@@ -1151,6 +1450,45 @@ export default function DevPreview() {
 
         <Section title="Goals: chart, pace slider, New goal dialog (drag the slider — ghost line shows your real pace; untick deals; 'fail' in the goal name shows an error)">
           <GoalChartDemo />
+        </Section>
+
+        <Section title="Improvements (switch tabs or Tab + ← → Home End; edit and save the review; add/delete lessons, experiments, ideas; 'fail' in a new item shows an error)">
+          <div className="rounded-xl border border-dashed border-border p-4">
+            <ImproveDemo />
+          </div>
+        </Section>
+
+        <Section title="Improvements: empty states and a worse experiment">
+          <div className="grid gap-4 lg:grid-cols-3">
+            <RunningExperimentCard onStart={log('start experiment')} />
+            <RunningExperimentCard {...mockRunningExperiment} during="11.5%" better={false} day={14} />
+            <WeeklyGoalsCard rows={[]} onEdit={log('edit weekly goals')} />
+            <PastReviews items={[]} />
+            <LessonsList lessons={[]} onAdd={(v) => void log('add lesson')(v)} onDelete={log('delete lesson')} />
+            <IdeasList
+              ideas={[]}
+              onAdd={(v) => void log('add idea')(v)}
+              onMakeTask={log('make task')}
+              onTestIt={log('test it')}
+              onSetStatus={log('status')}
+              onDelete={log('delete idea')}
+            />
+          </div>
+          <div className="mt-4">
+            <ExperimentsList
+              experiments={[]}
+              today={MOCK_IMPROVE_TODAY}
+              onAdd={(v) => void log('add experiment')(v)}
+              onSetStatus={log('status')}
+              onDelete={log('delete experiment')}
+            />
+          </div>
+        </Section>
+
+        <Section title="Settings (tabs scroll to each card; turn the master switch off to grey out the rows; Restore 'Mon 26 Oct' shows an error; Delete account needs DELETE typed)">
+          <div className="rounded-xl border border-dashed border-border p-4">
+            <SettingsDemo />
+          </div>
         </Section>
 
         <Section title="Flame (all six streak levels)">

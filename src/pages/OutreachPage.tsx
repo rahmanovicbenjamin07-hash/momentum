@@ -2,13 +2,14 @@ import { Loader2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { toast } from 'sonner'
-import { useContacts, useCreateContact, useImportContacts, useSetStage } from '@/api/contacts'
+import { useContacts, useCreateContact, useSetStage } from '@/api/contacts'
 import { useCreateTemplate, useTemplates, useUpdateTemplate } from '@/api/templates'
+import { useContactsCsvImport } from '@/app/useContactsCsvImport'
 import { useUserToday } from '@/app/useUserToday'
 import { EmptyState } from '@/components/EmptyState'
 import { AddLeadForm } from '@/components/outreach/AddLeadForm'
 import { ContactsTable } from '@/components/outreach/ContactsTable'
-import { CsvImportDialog, type CsvPreview } from '@/components/outreach/CsvImportDialog'
+import { CsvImportDialog } from '@/components/outreach/CsvImportDialog'
 import { STAGE_META, type SourceFilterValue, type StageFilterValue } from '@/components/outreach/meta'
 import { OutreachHeader, type OutreachView } from '@/components/outreach/OutreachHeader'
 import { OutreachToolbar } from '@/components/outreach/OutreachToolbar'
@@ -17,7 +18,7 @@ import { SourceFilter } from '@/components/outreach/SourceFilter'
 import { StageCounts } from '@/components/outreach/StageCounts'
 import { TemplatesDialog } from '@/components/outreach/TemplatesDialog'
 import { Button } from '@/components/ui/button'
-import { CSV_BOM, contactsToCsv, parseContactsCsv, type ContactImport } from '@/lib/csv'
+import { CSV_BOM, contactsToCsv } from '@/lib/csv'
 import { findDuplicate, leadToContact, type LeadKeys } from '@/lib/outreach'
 import { countsBySource, countsByStage, filterContacts, isFollowUpDue } from '@/lib/outreachList'
 import { SOURCES, STAGES, type AddLeadFormInput, type Contact, type Source, type Stage } from '@/schemas/outreach'
@@ -26,11 +27,6 @@ const PAGE_SIZE = 25
 
 const isSource = (v: string | null): v is Source => SOURCES.includes(v as Source)
 const isStage = (v: string | null): v is Stage => STAGES.includes(v as Stage)
-
-/** Short grey text for a CSV preview row, e.g. "Designer · Pixel Lab". */
-function importDetail(c: ContactImport): string {
-  return [c.role ?? c.category ?? c.upwork_job_title, c.company, c.city, c.email].filter(Boolean).join(' · ')
-}
 
 function downloadCsv(contacts: readonly Contact[], today: string) {
   const blob = new Blob([CSV_BOM + contactsToCsv(contacts)], { type: 'text/csv;charset=utf-8' })
@@ -77,7 +73,7 @@ export default function OutreachPage() {
   const contacts = useContacts()
   const templates = useTemplates()
   const createContact = useCreateContact()
-  const importContacts = useImportContacts()
+  const csvImport = useContactsCsvImport()
   const setStage = useSetStage()
   const createTemplate = useCreateTemplate()
   const updateTemplate = useUpdateTemplate()
@@ -85,10 +81,6 @@ export default function OutreachPage() {
   const [adding, setAdding] = useState(false)
   const [draft, setDraft] = useState<Partial<AddLeadFormInput>>({})
   const [templatesOpen, setTemplatesOpen] = useState(false)
-  const [csvOpen, setCsvOpen] = useState(false)
-  const [csvRows, setCsvRows] = useState<ContactImport[]>([])
-  const [csvPreview, setCsvPreview] = useState<CsvPreview | null>(null)
-  const [parsing, setParsing] = useState(false)
 
   const all = useMemo(() => contacts.data ?? [], [contacts.data])
   // Source chips count every lead; stage counts follow the chosen source (like the design).
@@ -112,34 +104,6 @@ export default function OutreachPage() {
 
   const duplicate = adding ? findDuplicate(draft as LeadKeys, all) : null
 
-  async function handleFile(file: File) {
-    setParsing(true)
-    try {
-      const parsed = parseContactsCsv(await file.text())
-      setCsvRows(parsed.rows.map((r) => r.contact))
-      setCsvPreview({
-        rows: parsed.rows.map(({ line, contact }) => ({
-          line,
-          name: contact.name,
-          source: contact.source,
-          detail: importDetail(contact) || null,
-        })),
-        errors: parsed.errors.map(({ line, messages }) => ({ line, message: messages.join('; ') })),
-      })
-    } catch {
-      setCsvRows([])
-      setCsvPreview({ rows: [], errors: [{ line: 1, message: 'Couldn’t read that file. Is it a CSV?' }] })
-    } finally {
-      setParsing(false)
-    }
-  }
-
-  function closeCsv() {
-    setCsvOpen(false)
-    setCsvPreview(null)
-    setCsvRows([])
-  }
-
   const header = (
     <OutreachHeader
       leadCount={all.length}
@@ -148,7 +112,7 @@ export default function OutreachPage() {
       view={view}
       onViewChange={(v) => setParam({ view: v === 'board' ? 'board' : null })}
       onTemplates={() => setTemplatesOpen(true)}
-      onImportCsv={() => setCsvOpen(true)}
+      onImportCsv={csvImport.open}
       onExportCsv={() => {
         if (all.length === 0) {
           toast('No leads to export yet.')
@@ -177,23 +141,7 @@ export default function OutreachPage() {
           }
         }}
       />
-      <CsvImportDialog
-        open={csvOpen}
-        onOpenChange={(next) => (next ? setCsvOpen(true) : closeCsv())}
-        preview={csvPreview}
-        parsing={parsing}
-        onFileSelect={(file) => void handleFile(file)}
-        onImport={async () => {
-          if (csvRows.length === 0) throw new Error('There are no good rows to import.')
-          try {
-            const count = await importContacts.mutateAsync(csvRows)
-            toast.success(`Imported ${count} ${count === 1 ? 'lead' : 'leads'}`)
-            closeCsv()
-          } catch {
-            throw new Error("Couldn't import the leads. Nothing was lost; try again.")
-          }
-        }}
-      />
+      <CsvImportDialog {...csvImport.dialog} />
     </>
   )
 

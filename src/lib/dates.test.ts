@@ -146,3 +146,14 @@ describe('formatLongDate', () => {
     expect(formatLongDate(new Date('2026-10-28T02:00:00Z'), 'America/New_York')).toBe('Tuesday, 27 October 2026')
   })
 })
+
+describe('weeks starting on Sunday', () => {
+  it('weekStart and weekDays follow weekStartsOn', () => {
+    // Wednesday 28 Oct 2026
+    expect(weekStart('2026-10-28')).toBe('2026-10-26') // Monday (default)
+    expect(weekStart('2026-10-28', 0)).toBe('2026-10-25') // Sunday
+    expect(weekStart('2026-10-25', 0)).toBe('2026-10-25') // a Sunday starts its own week
+    expect(weekStart('2026-10-25', 1)).toBe('2026-10-19') // …but ends the Monday week
+    expect(weekDays('2026-10-28', 0)).toEqual(['2026-10-25', '2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31'])
+  })
+})

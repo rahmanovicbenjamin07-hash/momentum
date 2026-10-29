@@ -91,7 +91,7 @@ export function WonPanel({ contact, today, onSave }: WonPanelProps) {
           <input type="checkbox" className="size-4 accent-good" {...register('add_to_money_earned')} />
           Add to “Money earned”
         </label>
-        <Button type="submit" disabled={isSubmitting} className="bg-good text-white hover:bg-good/90">
+        <Button type="submit" disabled={isSubmitting} className="bg-good-strong text-white hover:bg-good-strong/90">
           {isSubmitting && <Loader2 aria-hidden="true" className="animate-spin" />}
           Save deal
         </Button>

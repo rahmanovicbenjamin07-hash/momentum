@@ -2,7 +2,7 @@ import type { Page, Route } from '@playwright/test'
 
 /**
  * A tiny in-memory stand-in for Supabase, so e2e tests run without a real project.
- * Supports what the app uses: GET with eq/neq/lt/gte/lte/is/in/not filters, insert, upsert, update, delete
+ * Supports what the app uses: GET (and HEAD counts) with eq/neq/lt/gte/lte/is/in/not filters, insert, upsert, update, delete
  * and SQL function calls (rpc), which answer from the handlers you pass (or [] by default).
  * It does NOT check security (RLS); that is tested against the real database.
  */
@@ -11,6 +11,8 @@ export type Row = Record<string, unknown>
 export type MockDb = Record<string, Row[]>
 /** Answers one SQL function call: receives its arguments (e.g. { p_from, p_to }) and the db. */
 export type RpcHandler = (args: Row, db: MockDb) => unknown
+/** One file in the Storage "backups" folder, e.g. { name: '2026-10-28.json', size: 2_200_000, updated_at: '2026-10-28T02:00:00Z' }. */
+export type MockBackup = { name: string; size: number; updated_at: string }
 
 export const TEST_USER = { id: '00000000-0000-4000-8000-000000000001', email: 'test@example.com' }
 
@@ -54,6 +56,12 @@ const DEFAULTS: Record<string, Row> = {
   touches: { template_id: null, body: null, got_reply: false },
   templates: { channel: null },
   goals: { include_pipeline: false },
+  reviews: { wins: '', misses: '', lesson: '', focus: '', status: 'draft' },
+  lessons: { area: 'Other' },
+  experiments: { hypothesis: '', status: 'running', before_value: null, during_value: null, result: '' },
+  ideas: { status: 'new' },
+  notification_prefs: { enabled: true, time: null, time_end: null },
+  notifications: { body: '', link: null, read_at: null },
 }
 
 /** Mirrors the touches trigger: a sent/received touch updates the contact's last_touch_at. */
@@ -115,7 +123,7 @@ function respond(route: Route, status: number, body?: unknown) {
   return route.fulfill({
     status,
     contentType: 'application/json',
-    headers: { 'access-control-allow-origin': '*' },
+    headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' },
     body: body === undefined ? '' : JSON.stringify(body),
   })
 }
@@ -125,11 +133,13 @@ function respond(route: Route, status: number, body?: unknown) {
  * Pass `now` when the test fixes the browser clock, so server-made timestamps
  * (created_at, completed_at) match the page's "today" instead of the real date.
  * Pass `rpc` to answer SQL function calls by name; any other function returns [].
+ * Pass `backups` for the Storage backup list (Settings). The Edge Functions 'restore'
+ * and 'delete-account' answer with fake success; each call is added to db.functionCalls.
  */
 export async function mockSupabase(
   page: Page,
   db: MockDb,
-  options: { now?: Date; rpc?: Record<string, RpcHandler> } = {},
+  options: { now?: Date; rpc?: Record<string, RpcHandler>; backups?: MockBackup[] } = {},
 ): Promise<MockDb> {
   const nowIso = () => (options.now ?? new Date()).toISOString()
   const session = {
@@ -154,6 +164,41 @@ export async function mockSupabase(
 
   await page.route(`${SUPABASE_URL}/auth/v1/**`, (route) => respond(route, 200, {}))
 
+  // Storage: the nightly backups in the user's folder (Settings → Data & backups).
+  await page.route(`${SUPABASE_URL}/storage/v1/**`, (route) => {
+    if (route.request().method() === 'OPTIONS') return respond(route, 204)
+    if (!route.request().url().includes('/object/list/backups')) return respond(route, 404, { message: 'mockSupabase: storage path not mocked' })
+    return respond(
+      route,
+      200,
+      (options.backups ?? []).map((b) => ({
+        name: b.name,
+        id: crypto.randomUUID(),
+        created_at: b.updated_at,
+        updated_at: b.updated_at,
+        metadata: { size: b.size },
+      })),
+    )
+  })
+
+  // Edge Functions: fake success, and remember the call.
+  await page.route(`${SUPABASE_URL}/functions/v1/**`, (route) => {
+    const request = route.request()
+    if (request.method() === 'OPTIONS') return respond(route, 204)
+    const name = new URL(request.url()).pathname.replace('/functions/v1/', '')
+    const body = (() => {
+      try {
+        return request.postDataJSON() as unknown
+      } catch {
+        return null
+      }
+    })()
+    ;(db.functionCalls ??= []).push({ name, body })
+    if (name === 'restore') return respond(route, 200, { restoredTables: 16, rows: 42 })
+    if (name === 'delete-account') return respond(route, 200, { ok: true })
+    return respond(route, 404, { message: `mockSupabase: function ${name} not mocked` })
+  })
+
   await page.route(`${SUPABASE_URL}/rest/v1/**`, async (route) => {
     const request = route.request()
     if (request.method() === 'OPTIONS') return respond(route, 204)
@@ -175,6 +220,20 @@ export async function mockSupabase(
     switch (request.method()) {
       case 'GET':
         return returnRows(filterRows(rows, params))
+
+      case 'HEAD': {
+        // select(..., { count: 'exact', head: true }): only the count, in Content-Range.
+        const count = filterRows(rows, params).length
+        return route.fulfill({
+          status: 200,
+          headers: {
+            'access-control-allow-origin': '*',
+            'access-control-expose-headers': 'content-range',
+            'content-range': `*/${count}`,
+          },
+          body: '',
+        })
+      }
 
       case 'POST': {
         const body = request.postDataJSON() as Row | Row[]

@@ -82,14 +82,14 @@ function dateFromKey(key: DateKey): Date {
 export default function TodayPage() {
   const [params, setParams] = useSearchParams()
   const dayParam = params.get('day')
-  const { today, selected, timeZone, view, isError, refetch } = useTodayData(
+  const { today, selected, timeZone, weekStartsOn, view, isError, refetch } = useTodayData(
     dayParam && isDateKey(dayParam) ? dayParam : undefined,
   )
   const isToday = selected === today
 
   const overdue = useOverdueTasks(today)
   const contacts = useContacts()
-  const outreachWeek = useOutreachWeek(today, timeZone)
+  const outreachWeek = useOutreachWeek(today, timeZone, weekStartsOn)
   const dailyLog = useDailyLog(selected)
 
   const toggleCheck = useToggleRoutineCheck()

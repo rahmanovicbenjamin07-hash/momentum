@@ -163,7 +163,7 @@ export function TodayTasksCard({
               <Button variant="outline">Cancel</Button>
             </DialogClose>
             <Button
-              className="bg-bad text-white hover:bg-bad/90"
+              className="bg-bad-strong text-white hover:bg-bad-strong/90"
               onClick={() => {
                 pendingRemove.current = confirming?.id ?? null
                 setConfirming(null)

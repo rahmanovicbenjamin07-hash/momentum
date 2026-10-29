@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useProfile } from '@/api/profile'
-import { DEFAULT_TIME_ZONE, getToday, type DateKey } from '@/lib/dates'
+import { DEFAULT_TIME_ZONE, getToday, type DateKey, type WeekStartsOn } from '@/lib/dates'
 import { useAuth } from './auth-context'
 
 /**
- * The user's "today" (their time zone and day_end_hour from the profile).
+ * The user's "today" (their time zone and day_end_hour from the profile) and the day their week starts on.
  * Re-checks every minute and when the tab comes back, so it rolls over at the right moment.
  */
-export function useUserToday(): { today: DateKey; timeZone: string } {
+export function useUserToday(): { today: DateKey; timeZone: string; weekStartsOn: WeekStartsOn } {
   const { user } = useAuth()
   const { data: profile } = useProfile(user?.id)
   const timeZone = profile?.timezone ?? DEFAULT_TIME_ZONE
   const dayEndHour = profile?.day_end_hour ?? 0
+  const weekStartsOn: WeekStartsOn = profile?.week_start === 0 ? 0 : 1
 
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
@@ -27,5 +28,5 @@ export function useUserToday(): { today: DateKey; timeZone: string } {
     }
   }, [])
 
-  return { today: getToday({ now, timeZone, dayEndHour }), timeZone }
+  return { today: getToday({ now, timeZone, dayEndHour }), timeZone, weekStartsOn }
 }

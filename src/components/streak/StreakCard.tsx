@@ -38,7 +38,7 @@ export function StreakCard({ days }: StreakCardProps) {
           value={tier.progress * 100}
           label={`Progress to ${tier.nextLevel.name}`}
           color={level.colors.outer}
-          trackColor="#F3F4F6"
+          trackColor="var(--chart-track)"
           className="mt-2"
         />
         <p className="mt-2 text-[13px] text-ink-2">{streakCaption(safeDays, tier)}</p>

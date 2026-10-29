@@ -9,9 +9,9 @@ import { weekCellTone, weekSoFarLabel, type WeekCellTone } from '@/lib/todayCard
 const TONE_CLASSES: Record<WeekCellTone, string> = {
   empty: 'bg-muted text-transparent',
   low: 'bg-brand-tint text-brand',
-  mid: 'bg-[#C7D2FE] text-[#312E81]',
+  mid: 'bg-week-mid text-week-mid-text',
   high: 'bg-brand text-white',
-  top: 'bg-[#312E81] text-white',
+  top: 'bg-week-top text-week-top-text',
 }
 
 type ThisWeekCardProps = {

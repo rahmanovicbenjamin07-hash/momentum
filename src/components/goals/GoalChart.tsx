@@ -164,7 +164,7 @@ export function GoalChart({ chart, formatY, formatTick = formatY }: GoalChartPro
             y2={y(chart.pipelineJump.to)}
             strokeWidth={3}
             strokeLinecap="round"
-            className="stroke-[#D97706]"
+            className="stroke-chart-amber"
           />
         )}
 

@@ -1,24 +1,31 @@
 /**
- * Chart colours, checked with the dataviz palette validator against the white card
- * (light mode). The daily line is below 3:1 contrast, so every chart that uses it also
- * has a legend, a tooltip and a hidden data table.
+ * Chart colours as CSS variables (values for light and dark live in src/index.css), so
+ * every chart follows the theme. Light values were checked with the dataviz palette
+ * validator against the white card. The daily line is below 3:1 contrast, so every chart
+ * that uses it also has a legend, a tooltip and a hidden data table.
  */
 export const CHART = {
   /** 7-day average, funnel bars, trusted reply-rate bars. */
-  strong: '#4338CA',
+  strong: 'var(--chart-strong)',
   /** Daily line. */
-  soft: '#8B93F8',
+  soft: 'var(--chart-soft)',
   /** Reply-rate bars with too few sends to trust. */
-  faded: '#A5B4FC',
+  faded: 'var(--chart-faded)',
   /** Bar tracks and empty heatmap cells. */
-  track: '#EEF0F4',
+  track: 'var(--chart-track)',
   /** Hairline grid and axis. */
-  grid: '#E5E7EB',
-  gridFaint: '#F3F4F6',
+  grid: 'var(--chart-grid)',
+  gridFaint: 'var(--chart-grid-faint)',
   /** Hover crosshair. */
-  crosshair: '#9CA3AF',
-  /** Heatmap: one hue, light → dark (ordinal check passed). Index 0 = nothing done / nothing scheduled. */
-  heat: ['#EEF0F4', '#9AA5FA', '#6F74F0', '#4338CA', '#272369'] as const,
+  crosshair: 'var(--chart-muted)',
+  /** Comparison lines (last year, perfect year). */
+  muted: 'var(--chart-muted)',
+  /** Goal lines. */
+  goal: 'var(--good)',
+  /** Halo around dots so they stand out from lines: the card colour. */
+  halo: 'var(--card)',
+  /** Heatmap: one hue, light → dark in light mode, dark → bright in dark mode. Index 0 = nothing done / nothing scheduled. */
+  heat: ['var(--heat-0)', 'var(--heat-1)', 'var(--heat-2)', 'var(--heat-3)', 'var(--heat-4)'] as const,
 } as const
 
 /** "75%" from 0.75. */

@@ -16,6 +16,9 @@ const today = ['today'] as const
 const outreach = ['outreach'] as const
 const stats = ['stats'] as const
 const goals = ['goals'] as const
+const improve = ['improve'] as const
+const settings = ['settings'] as const
+const notifications = ['notifications'] as const
 
 /** Filters for the contacts list. Only server-side filters belong here; keep it a plain, serialisable object. */
 export type ContactFilters = {
@@ -86,5 +89,27 @@ export const queryKeys = {
     openDeals: () => [...goals, 'openDeals'] as const,
     // Prefix: every goal's series.
     goalSeriesAll: () => [...goals, 'series'] as const,
+  },
+  /** Improvements page. */
+  improve: {
+    all: improve,
+    reviews: () => [...improve, 'reviews'] as const,
+    /** weekStart = Monday of the week, 'yyyy-MM-dd'. */
+    review: (weekStart: IsoDate) => [...improve, 'review', weekStart] as const,
+    lessons: () => [...improve, 'lessons'] as const,
+    experiments: () => [...improve, 'experiments'] as const,
+    ideas: () => [...improve, 'ideas'] as const,
+  },
+  /** Settings page (profile settings use queryKeys.profile). */
+  settings: {
+    all: settings,
+    notificationPrefs: () => [...settings, 'notificationPrefs'] as const,
+    backups: () => [...settings, 'backups'] as const,
+  },
+  /** The bell. Polled every minute. */
+  notifications: {
+    all: notifications,
+    notifications: () => [...notifications, 'list'] as const,
+    unreadCount: () => [...notifications, 'unreadCount'] as const,
   },
 } as const

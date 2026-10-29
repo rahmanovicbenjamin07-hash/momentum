@@ -655,3 +655,152 @@ begin
     (select count(*) from public.goals where user_id = v_user);
 end;
 $$;
+
+-- =============================================================================
+-- Improvements + notifications demo data (Phase 5; design/improve.png and
+-- design/today-notifications.png).
+--
+-- What you get:
+--   * 3 saved weekly reviews: weeks 40–42 (28 Sep, 5 Oct, 12 Oct 2026) with
+--     task completion 69 / 72 / 76 % and the focus texts from the design.
+--   * 5 lessons, 3 experiments (one running: "Follow up on day 3 instead of day 7"),
+--     4 ideas.
+--   * 5 bell notifications (2 unread), dated relative to today.
+--
+-- Skips itself if your account already has reviews.
+-- Needs the migration 20261029110000_improve_settings.sql pushed first.
+-- =============================================================================
+do $$
+declare
+  -- Only needed if the project has more than one user: put your login email here.
+  v_email text := null;
+
+  v_user uuid;
+  v_user_count int;
+  v_today date := (now() at time zone 'Europe/Sarajevo')::date;
+  -- Most recent Sunday before today.
+  v_sunday date := v_today - extract(isodow from v_today)::int;
+  v_emir uuid;
+begin
+  -- ---------------------------------------------------------------------------
+  -- Whose account? (same rules as the other parts)
+  -- ---------------------------------------------------------------------------
+  if v_email is not null then
+    select id into v_user from auth.users where lower(email) = lower(v_email);
+    if v_user is null then
+      raise exception 'No user with email %. Check the spelling, or sign in to the app once first.', v_email;
+    end if;
+  else
+    select count(*) into v_user_count from auth.users;
+    if v_user_count = 0 then
+      raise notice 'Improvements seed skipped: no users yet. Sign in to the app once, then run this file again.';
+      return;
+    elsif v_user_count > 1 then
+      raise exception 'This project has % users. Set v_email at the top of every seed block to your login email.', v_user_count;
+    end if;
+    select id into v_user from auth.users;
+  end if;
+
+  if exists (select 1 from public.reviews where user_id = v_user) then
+    raise notice 'Improvements seed skipped: this account already has reviews. Nothing was changed.';
+    return;
+  end if;
+
+  -- ---------------------------------------------------------------------------
+  -- Weekly reviews (weeks 40–42).
+  -- ---------------------------------------------------------------------------
+  insert into public.reviews (user_id, week_start, wins, misses, lesson, focus, status, stats_snapshot, created_at)
+  values
+    (v_user, date '2026-09-28',
+     'Woke up on time every weekday. Finished the portfolio case study.',
+     'Scrolled my phone until lunch most days; outreach started late.',
+     'The first hour decides the day.',
+     'no phone before 11:00', 'saved',
+     '{"task_completion":69,"outreach_sent":14,"replies":2,"meetings":0}',
+     (date '2026-10-04' + time '18:30') at time zone 'Europe/Sarajevo'),
+    (v_user, date '2026-10-05',
+     'Phone stayed off until 11:00 on 4 of 5 days. First reply from a Google Maps lead.',
+     'Only 16 outreaches; Friday got lost to admin.',
+     'Batching messages in one block is faster than sending them between tasks.',
+     '20 outreaches', 'saved',
+     '{"task_completion":72,"outreach_sent":16,"replies":3,"meetings":1}',
+     (date '2026-10-11' + time '18:15') at time zone 'Europe/Sarajevo'),
+    (v_user, date '2026-10-12',
+     'Hit 20 outreaches. Booked a meeting with Bloom Studio.',
+     'Mornings started slowly because I was deciding what to do first.',
+     'Deciding the top 3 the evening before saves the first 30 minutes.',
+     'plan top 3 the night before', 'saved',
+     '{"task_completion":76,"outreach_sent":20,"replies":4,"meetings":1}',
+     (date '2026-10-18' + time '18:40') at time zone 'Europe/Sarajevo');
+
+  -- ---------------------------------------------------------------------------
+  -- Lessons.
+  -- ---------------------------------------------------------------------------
+  insert into public.lessons (user_id, area, text, created_at)
+  values
+    (v_user, 'Outreach', 'Naming one specific thing from their website beats a generic compliment.', now() - interval '3 days'),
+    (v_user, 'Outreach', 'Batching messages in one block is faster than sending them between tasks.', now() - interval '18 days'),
+    (v_user, 'Routine',  'Deciding the top 3 the evening before saves the first 30 minutes.', now() - interval '11 days'),
+    (v_user, 'Work',     'The first hour decides the day.', now() - interval '25 days'),
+    (v_user, 'Health',   'A short walk after lunch beats a third coffee.', now() - interval '32 days');
+
+  -- ---------------------------------------------------------------------------
+  -- Experiments.
+  -- ---------------------------------------------------------------------------
+  insert into public.experiments
+    (user_id, title, hypothesis, metric, start_date, end_date, status, before_value, during_value, result, created_at)
+  values
+    (v_user, 'Follow up on day 3 instead of day 7',
+     'An earlier follow-up catches people while they still remember the first message.',
+     'reply_rate', date '2026-10-19', date '2026-11-01', 'running', 14.2, 21.0, '',
+     (date '2026-10-19' + time '09:00') at time zone 'Europe/Sarajevo'),
+    (v_user, 'Plan top 3 the night before',
+     'Knowing the first task removes the slow start in the morning.',
+     'task_completion', date '2026-10-12', date '2026-10-19', 'kept', 72, 76,
+     'Completion went up and mornings felt calmer. Keeping it.',
+     (date '2026-10-12' + time '09:00') at time zone 'Europe/Sarajevo'),
+    (v_user, 'Email openers to logistics companies',
+     'Logistics firms read email more than LinkedIn.',
+     'reply_rate', date '2026-09-28', date '2026-10-12', 'dropped', 12.5, 0,
+     'No replies (0 of 9). Dropped.',
+     (date '2026-09-28' + time '09:00') at time zone 'Europe/Sarajevo');
+
+  -- ---------------------------------------------------------------------------
+  -- Ideas.
+  -- ---------------------------------------------------------------------------
+  insert into public.ideas (user_id, text, status, created_at)
+  values
+    (v_user, 'Send a short Loom video instead of a text pitch', 'new', now() - interval '2 days'),
+    (v_user, 'Ask happy clients for one referral each', 'new', now() - interval '6 days'),
+    (v_user, 'Do outreach right after the morning workout', 'testing', now() - interval '12 days'),
+    (v_user, 'Keep a swipe file of replies that worked', 'done', now() - interval '20 days');
+
+  -- ---------------------------------------------------------------------------
+  -- Notifications (newest two unread). Links to Emir's contact page if that lead exists.
+  -- ---------------------------------------------------------------------------
+  select id into v_emir from public.contacts
+   where user_id = v_user and name ilike 'Emir Kova%'
+   order by created_at limit 1;
+
+  insert into public.notifications (user_id, kind, title, body, link, read_at, dedupe_key, created_at)
+  values
+    (v_user, 'followup_due', 'Follow up with Emir Kovač', 'Due today · LinkedIn',
+     case when v_emir is null then '/outreach' else '/outreach/' || v_emir end, null,
+     'seed:followup_due:' || v_today, (v_today + time '09:00') at time zone 'Europe/Sarajevo'),
+    (v_user, 'followup_late', 'Marko Petrović is 2 days late', 'Follow-up overdue · Email',
+     '/outreach', null,
+     'seed:followup_late:' || v_today, (v_today + time '09:00') at time zone 'Europe/Sarajevo'),
+    (v_user, 'routine', 'Wake up', 'Routine reminder · done',
+     '/', (v_today + time '06:05') at time zone 'Europe/Sarajevo',
+     'seed:routine:' || v_today, (v_today + time '06:00') at time zone 'Europe/Sarajevo'),
+    (v_user, 'close_day', 'Close the day', '2 tasks left — moved to today',
+     '/', (v_today + time '07:30') at time zone 'Europe/Sarajevo',
+     'seed:close_day:' || (v_today - 1), ((v_today - 1) + time '21:00') at time zone 'Europe/Sarajevo'),
+    (v_user, 'weekly_review', 'Weekly review is ready', 'Week 43 numbers are filled in',
+     '/improve', ((v_sunday + 1) + time '08:00') at time zone 'Europe/Sarajevo',
+     'seed:weekly_review:' || v_sunday, (v_sunday + time '18:00') at time zone 'Europe/Sarajevo')
+  on conflict (user_id, dedupe_key) do nothing;
+
+  raise notice 'Improvements demo data added for user %: 3 reviews, 5 lessons, 3 experiments, 4 ideas, 5 notifications.', v_user;
+end;
+$$;

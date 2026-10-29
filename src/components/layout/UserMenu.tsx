@@ -28,7 +28,7 @@ export function UserMenu({ user, onSignOut }: UserMenuProps) {
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Account menu"
-        className="grid size-9 shrink-0 place-items-center rounded-full bg-[#374151] text-[13px] font-semibold text-white outline-none hover:bg-[#4B5563] focus-visible:ring-3 focus-visible:ring-white/50"
+        className="grid size-9 shrink-0 place-items-center rounded-full bg-topbar-line text-[13px] font-semibold text-white outline-none hover:bg-topbar-line-strong focus-visible:ring-3 focus-visible:ring-white/50"
       >
         {initials}
       </DropdownMenuTrigger>

@@ -160,7 +160,7 @@ function BoardColumn({ stage, contacts, today, justDragged }: BoardColumnProps) 
       aria-label={`${label}, ${contacts.length}`}
       data-board-column={stage}
       className={cn(
-        'flex w-[200px] shrink-0 flex-col gap-2 self-start rounded-xl border bg-[#ECEEF2] p-2 transition-colors',
+        'flex w-[200px] shrink-0 flex-col gap-2 self-start rounded-xl border bg-sunken p-2 transition-colors',
         isOver ? 'border-brand bg-brand-tint' : 'border-transparent',
       )}
     >
@@ -169,7 +169,7 @@ function BoardColumn({ stage, contacts, today, justDragged }: BoardColumnProps) 
         <span className="text-xs font-medium text-ink-2 tabular-nums">{contacts.length}</span>
       </h3>
       {contacts.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-[#C9CDD4] px-3 py-4 text-center text-xs text-ink-2">
+        <p className="rounded-lg border border-dashed border-input px-3 py-4 text-center text-xs text-ink-2">
           Drop a lead here
         </p>
       ) : (

@@ -39,8 +39,8 @@ type MetricChartProps = {
 
 const HEIGHT = 320
 const PAD = { top: 14, right: 16, bottom: 28, left: 52 }
-const LAST_YEAR = '#9CA3AF'
-const GOAL = '#15803D'
+const LAST_YEAR = CHART.muted
+const GOAL = CHART.goal
 const MODES: { value: MetricChartMode; label: string }[] = [
   { value: 'running', label: 'Running total' },
   { value: 'monthly', label: 'Per month' },
@@ -271,10 +271,10 @@ export function MetricChart({
                 {months.map((m) => {
                   const i = monthIndex(m.month)
                   const big = i === lastIndex || i === hovered
-                  return <circle key={m.month} cx={x(i)} cy={y(m.total)} r={big ? 5 : 3} fill={CHART.strong} stroke="white" strokeWidth={2} />
+                  return <circle key={m.month} cx={x(i)} cy={y(m.total)} r={big ? 5 : 3} fill={CHART.strong} stroke={CHART.halo} strokeWidth={2} />
                 })}
                 {compare && ly && hovered !== null && (
-                  <circle cx={x(hovered)} cy={y(ly.total)} r={4} fill="white" stroke={LAST_YEAR} strokeWidth={2} />
+                  <circle cx={x(hovered)} cy={y(ly.total)} r={4} fill={CHART.halo} stroke={LAST_YEAR} strokeWidth={2} />
                 )}
               </>
             ) : (
@@ -292,7 +292,7 @@ export function MetricChart({
                 })}
                 {compare &&
                   lastYear.map((m) => (
-                    <circle key={m.month} cx={x(monthIndex(m.month))} cy={y(m.value)} r={4} fill="white" stroke={LAST_YEAR} strokeWidth={2} />
+                    <circle key={m.month} cx={x(monthIndex(m.month))} cy={y(m.value)} r={4} fill={CHART.halo} stroke={LAST_YEAR} strokeWidth={2} />
                   ))}
                 {goalPace !== null && (
                   <>
@@ -321,7 +321,7 @@ export function MetricChart({
         )}
         {compare && (
           <li className="flex items-center gap-1.5">
-            <span aria-hidden="true" className="size-2.5 rounded-full border-2 bg-white" style={{ borderColor: LAST_YEAR }} />
+            <span aria-hidden="true" className="size-2.5 rounded-full border-2 bg-card" style={{ borderColor: LAST_YEAR }} />
             {year - 1}, same month
           </li>
         )}

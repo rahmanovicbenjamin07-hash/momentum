@@ -28,7 +28,7 @@ export function OverdueBlock<T extends OverdueTask>({ tasks, today, onMoveToToda
   return (
     <section
       aria-labelledby={titleId}
-      className="flex flex-col gap-2 rounded-xl border border-[#FCD34D] bg-card px-4 py-3 sm:flex-row sm:items-start sm:gap-5"
+      className="flex flex-col gap-2 rounded-xl border border-warn-line bg-card px-4 py-3 sm:flex-row sm:items-start sm:gap-5"
     >
       <h2
         id={titleId}

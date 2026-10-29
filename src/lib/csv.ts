@@ -130,7 +130,8 @@ export const CSV_BOM = '﻿'
 /** Starts a spreadsheet formula. Such cells get a leading ' so Excel shows them as text. */
 const FORMULA_START = /^[=+\-@\t\r]/
 
-function escapeCell(value: string): string {
+/** One CSV cell: quoted when needed, formula-looking text made safe with a leading '. */
+export function escapeCell(value: string): string {
   const safe = FORMULA_START.test(value) ? `'${value}` : value
   return /[",;\r\n]|^\s|\s$/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
 }

@@ -9,7 +9,7 @@ const TONE_CLASSES: Record<TagTone, string> = {
   brand: 'bg-brand-tint text-brand',
   info: 'bg-info-tint text-info',
   neutral: 'bg-muted text-ink-2',
-  pink: 'bg-[#FCE7F3] text-[#BE185D]',
+  pink: 'bg-tag-pink-tint text-tag-pink',
   good: 'bg-good-tint text-good',
   warn: 'bg-warn-tint text-warn',
 }

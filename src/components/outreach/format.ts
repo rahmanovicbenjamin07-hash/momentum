@@ -91,7 +91,7 @@ export function leadInitials(lead: Pick<LeadSummary, 'name' | 'source' | 'upwork
 
 const AVATAR_TONES = [
   'bg-brand-tint text-brand',
-  'bg-[#FCE7F3] text-[#BE185D]',
+  'bg-tag-pink-tint text-tag-pink',
   'bg-info-tint text-info',
   'bg-warn-tint text-warn',
   'bg-good-tint text-good',

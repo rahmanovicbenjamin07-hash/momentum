@@ -1,4 +1,4 @@
-import { addDays, toDateKey, weekStart, type DateKey } from '@/lib/dates'
+import { addDays, toDateKey, weekStart, type DateKey, type WeekStartsOn } from '@/lib/dates'
 import { missedYesterday, todayProgress, weekProgress, type TodayProgress, type WeekProgress } from '@/lib/progress'
 import { buildStreakDays, computeStreak, type StreakResult } from '@/lib/streak'
 import { buildTodayItems } from '@/lib/todayList'
@@ -11,8 +11,8 @@ import type { RoutineCheck, RoutineItem, Task, TodayItem } from '@/schemas/today
 export const STREAK_LOOKBACK_DAYS = 180
 
 /** The one date range of routine checks the page loads: streak history + the week + the day being viewed. */
-export function checksRange(today: DateKey, selected: DateKey): { from: DateKey; to: DateKey } {
-  const candidates = [addDays(today, -(STREAK_LOOKBACK_DAYS - 1)), weekStart(today), selected]
+export function checksRange(today: DateKey, selected: DateKey, weekStartsOn: WeekStartsOn = 1): { from: DateKey; to: DateKey } {
+  const candidates = [addDays(today, -(STREAK_LOOKBACK_DAYS - 1)), weekStart(today, weekStartsOn), selected]
   const from = candidates.reduce((min, d) => (d < min ? d : min))
   const to = selected > today ? selected : today
   return { from, to }
@@ -24,6 +24,8 @@ export type TodayViewInput = {
   /** The day being viewed (usually today). */
   selected: DateKey
   timeZone: string
+  /** 1 = weeks start on Monday (default), 0 = Sunday. */
+  weekStartsOn?: WeekStartsOn
   routineItems: readonly RoutineItem[]
   /** Checks covering checksRange(today, selected). */
   checks: readonly RoutineCheck[]
@@ -76,7 +78,7 @@ export function deriveTodayView(input: TodayViewInput): TodayView {
     progress: todayProgress(items),
     openToday: todayItems.filter((item) => !item.done).length,
     streak,
-    week: weekProgress({ routineItems, checks, tasks, today, timeZone }),
+    week: weekProgress({ routineItems, checks, tasks, today, timeZone, weekStartsOn: input.weekStartsOn }),
     missed,
     streakSafe: streak.forgivenDates.includes(missed.date),
   }

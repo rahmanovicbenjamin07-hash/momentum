@@ -2,7 +2,7 @@ import { TZDate } from '@date-fns/tz'
 import { useMutation, useQuery, useQueryClient, type MutateOptions } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useAuth } from '@/app/auth-context'
-import { addDays, DEFAULT_TIME_ZONE, toDateKey, weekStart, type DateKey } from '@/lib/dates'
+import { addDays, DEFAULT_TIME_ZONE, toDateKey, weekStart, type DateKey, type WeekStartsOn } from '@/lib/dates'
 import { SENT_TOUCH_FOLLOW_UP_DAYS } from '@/lib/outreach'
 import { supabase } from '@/lib/supabase'
 import { uuid } from '@/lib/uuid'
@@ -41,22 +41,26 @@ function dayStartIso(day: DateKey, timeZone: string): string {
   return new Date(new TZDate(y, m - 1, d, timeZone).getTime()).toISOString()
 }
 
-/** Monday 00:00 up to (not including) next Monday 00:00 of the week that contains `today`, local time. */
-export function weekRange(today: DateKey, timeZone: string = DEFAULT_TIME_ZONE): { from: string; to: string } {
-  const monday = weekStart(today)
+/** Start of the week (Monday, or Sunday with weekStartsOn 0) 00:00 up to 7 days later, local time. */
+export function weekRange(
+  today: DateKey,
+  timeZone: string = DEFAULT_TIME_ZONE,
+  weekStartsOn: WeekStartsOn = 1,
+): { from: string; to: string } {
+  const monday = weekStart(today, weekStartsOn)
   return { from: dayStartIso(monday, timeZone), to: dayStartIso(addDays(monday, 7), timeZone) }
 }
 
 /**
- * Every touch (all contacts) in the week (Mon–Sun) that contains `today`.
+ * Every touch (all contacts) in the week (Mon–Sun, or Sun–Sat with weekStartsOn 0) that contains `today`.
  * Count the outreach with `weekOutreachCount` (src/lib/outreachList.ts).
  */
-export function useWeekTouches(today: DateKey) {
-  const monday = weekStart(today)
+export function useWeekTouches(today: DateKey, weekStartsOn: WeekStartsOn = 1) {
+  const monday = weekStart(today, weekStartsOn)
   return useQuery({
     queryKey: queryKeys.outreach.weekTouches(monday),
     queryFn: async (): Promise<Touch[]> => {
-      const { from, to } = weekRange(monday)
+      const { from, to } = weekRange(monday, DEFAULT_TIME_ZONE, weekStartsOn)
       const { data, error } = await supabase
         .from('touches')
         .select('*')

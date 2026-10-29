@@ -63,7 +63,7 @@ export function MetricCards({ metrics, selectedId, onSelect, onNew }: MetricCard
               </span>
               {m.goal !== null && m.goalShare !== null ? (
                 <>
-                  <MeterBar value={m.goalShare * 100} label={`${m.name}: share of yearly goal`} className="mt-3" trackColor="#EEF0F4" />
+                  <MeterBar value={m.goalShare * 100} label={`${m.name}: share of yearly goal`} className="mt-3" trackColor="var(--chart-track)" />
                   <span className="mt-2 text-xs text-ink-2">
                     {Math.round(m.goalShare * 100)}% of {formatMetricValue(m.goal, m.unit)} goal
                   </span>

@@ -30,6 +30,22 @@ export async function patchCachedLists<T>(
   return entries
 }
 
+/**
+ * Like patchCachedLists, for one cached value (a single row, a count…).
+ * `update` gets undefined when it isn't loaded yet; return undefined to leave it alone.
+ */
+export async function patchCachedValue<T>(
+  queryClient: QueryClient,
+  key: QueryKey,
+  update: (value: T | undefined) => T | undefined,
+): Promise<CacheSnapshot> {
+  await queryClient.cancelQueries({ queryKey: key, exact: true })
+  const before = queryClient.getQueryData<T>(key)
+  const after = update(before)
+  if (after !== undefined) queryClient.setQueryData<T>(key, after)
+  return [[key, before]]
+}
+
 export function restoreCache(queryClient: QueryClient, snapshot: CacheSnapshot | undefined): void {
   for (const [key, data] of snapshot ?? []) queryClient.setQueryData(key, data)
 }

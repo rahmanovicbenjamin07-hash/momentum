@@ -1,5 +1,5 @@
 import type { RoutineCheck, TodayItem } from '@/schemas/today'
-import { addDays, DEFAULT_TIME_ZONE, weekDays, type DateKey } from './dates'
+import { addDays, DEFAULT_TIME_ZONE, weekDays, type DateKey, type WeekStartsOn } from './dates'
 import { percentDone } from './today-list'
 import {
   buildTodayItems,
@@ -61,6 +61,8 @@ export type WeekProgressInput = {
   tasks: readonly TodayTaskInput[]
   today: DateKey
   timeZone?: string
+  /** 1 = weeks start on Monday (default), 0 = Sunday. */
+  weekStartsOn?: WeekStartsOn
 }
 
 /** "This week" card: Mon → today totals and the 7-day strip with % per day. */
@@ -70,12 +72,13 @@ export function weekProgress({
   tasks,
   today,
   timeZone = DEFAULT_TIME_ZONE,
+  weekStartsOn = 1,
 }: WeekProgressInput): WeekProgress {
   const all: Tally = { done: 0, total: 0 }
   const routine: Tally = { done: 0, total: 0 }
   const oneOff: Tally = { done: 0, total: 0 }
 
-  const days = weekDays(today).map((date): WeekDayProgress => {
+  const days = weekDays(today, weekStartsOn).map((date): WeekDayProgress => {
     const isFuture = date > today
     const isToday = date === today
     if (isFuture) return { date, done: 0, total: 0, percent: null, isToday, isFuture }
