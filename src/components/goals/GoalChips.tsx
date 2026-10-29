@@ -42,7 +42,7 @@ export function GoalChips({ goals, selectedId, onSelect }: GoalChipsProps) {
     <div
       role="group"
       aria-label="Goals"
-      className="-m-1 flex gap-2 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="relative -m-1 flex gap-2 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       {goals.map((goal, i) => {
         const selected = goal.id === selectedId

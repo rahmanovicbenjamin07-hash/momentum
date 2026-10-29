@@ -2,7 +2,7 @@ import type { Page, Route } from '@playwright/test'
 
 /**
  * A tiny in-memory stand-in for Supabase, so e2e tests run without a real project.
- * Supports what the app uses: GET with eq/neq/lt/gte/lte/is filters, insert, upsert, update, delete
+ * Supports what the app uses: GET with eq/neq/lt/gte/lte/is/in/not filters, insert, upsert, update, delete
  * and SQL function calls (rpc), which answer from the handlers you pass (or [] by default).
  * It does NOT check security (RLS); that is tested against the real database.
  */
@@ -53,6 +53,7 @@ const DEFAULTS: Record<string, Row> = {
   },
   touches: { template_id: null, body: null, got_reply: false },
   templates: { channel: null },
+  goals: { include_pipeline: false },
 }
 
 /** Mirrors the touches trigger: a sent/received touch updates the contact's last_touch_at. */
@@ -84,6 +85,16 @@ function matches(row: Row, column: string, filter: string): boolean {
       return actual >= expected
     case 'is':
       return actual === expected
+    case 'in':
+      // in.(a,b,"c d")
+      return expected
+        .slice(1, -1)
+        .split(',')
+        .map((v) => v.replace(/^"|"$/g, ''))
+        .includes(actual)
+    case 'not':
+      // not.is.null, not.eq.x …
+      return !matches(row, column, expected)
     default:
       throw new Error(`mockSupabase: unsupported filter ${column}=${filter}`)
   }

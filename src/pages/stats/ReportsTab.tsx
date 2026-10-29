@@ -2,9 +2,11 @@ import { Loader2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useContacts } from '@/api/contacts'
+import { useGoals, useGoalsSeries, useOpenDeals } from '@/api/goals'
 import { useMetrics } from '@/api/metrics'
 import { useRoutineItems } from '@/api/routine'
 import { useOutreachFunnel, useReplyRates, useRoutineDays, useTasksByTag } from '@/api/stats'
+import { goalSource, pipelineDeals, reportGoalRows } from '@/app/goalsView'
 import { shareCardImage } from '@/app/shareImage'
 import { useAllMetricEntries } from '@/app/statsQueries'
 import { buildReportInput, reportRanges } from '@/app/statsReports'
@@ -42,6 +44,9 @@ export default function ReportsTab() {
   const routineDays = useRoutineDays(ranges.previous.from, today)
   const metrics = useMetrics()
   const entries = useAllMetricEntries([ranges.year - 1, ranges.year])
+  const goals = useGoals()
+  const goalSeries = useGoalsSeries(goals.data)
+  const openDeals = useOpenDeals()
   const queries = [tagsNow, tagsBefore, repliesNow, repliesBefore, funnelNow, funnelBefore, contacts, routineItems, routineDays, metrics, entries]
 
   const report = useMemo(() => {
@@ -90,6 +95,14 @@ export default function ReportsTab() {
     metrics.data,
     entries.data,
   ])
+
+  // Each goal's status now (real pace). Undefined while loading: the card shows its placeholder.
+  const goalRows = useMemo(() => {
+    if (!goals.data || !goalSeries.data || !metrics.data || !routineItems.data || !openDeals.data) return undefined
+    const m = metrics.data
+    const r = routineItems.data
+    return reportGoalRows(goals.data, goalSeries.data, (goal) => goalSource(goal, m, r), today, pipelineDeals(openDeals.data).total)
+  }, [goals.data, goalSeries.data, metrics.data, routineItems.data, openDeals.data, today])
 
   async function share() {
     if (!report) return
@@ -143,7 +156,7 @@ export default function ReportsTab() {
           highlights={<Highlights highlights={report.highlights} />}
           keyNumbers={<KeyNumbers numbers={report.keyNumbers} previousLabel={report.previousLabel} />}
           routine={<RoutineConsistency routine={report.routine} />}
-          goals={<GoalStatuses />}
+          goals={<GoalStatuses goals={goalRows} />}
           lessons={<Lessons lessons={[]} />}
         />
       )}

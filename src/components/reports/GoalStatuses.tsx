@@ -25,7 +25,7 @@ type GoalStatusesProps = {
   href?: string
 }
 
-/** "Goals": each goal's status at the end of the period. A placeholder until Phase 4. */
+/** "Goals": each goal's status. Without `goals` (still loading) it shows a short placeholder. */
 export function GoalStatuses({ goals, href = '/goals' }: GoalStatusesProps) {
   const id = useId()
   return (
@@ -40,7 +40,7 @@ export function GoalStatuses({ goals, href = '/goals' }: GoalStatusesProps) {
       </div>
       {!goals ? (
         <p className="mt-2 rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-ink-3">
-          Goal statuses show up here once you set goals (coming with the Goals page).
+          Goal statuses show up here once you set goals.
         </p>
       ) : goals.length === 0 ? (
         <p className="mt-2 text-sm text-ink-3">No goals yet.</p>

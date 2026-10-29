@@ -3,7 +3,7 @@
  * that can count towards a money goal.
  * Writes are optimistic (the screen changes at once and rolls back with a toast if saving fails).
  */
-import { useMutation, useQuery, useQueryClient, type MutateOptions } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient, type MutateOptions } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useAuth } from '@/app/auth-context'
 import { getToday, type DateKey } from '@/lib/dates'
@@ -177,38 +177,57 @@ export function useDeleteGoal() {
  *   metric goal  → the metric's entries added up per month;
  *   routine goal → days the routine item was ticked done, per month.
  */
+export async function fetchGoalSeries(goal: Goal): Promise<GoalSeries> {
+  const today = getToday()
+  let months: MonthValue[]
+  if (goal.source_kind === 'metric') {
+    const { data, error } = await supabase
+      .from('metric_entries')
+      .select('entry_date, value, note')
+      .eq('metric_id', goal.source_id)
+      .gte('entry_date', goal.start_date)
+      .lte('entry_date', today)
+      .order('entry_date')
+    if (error) throw error
+    months = groupByMonth(data)
+  } else {
+    const { data, error } = await supabase
+      .from('routine_checks')
+      .select('date')
+      .eq('routine_item_id', goal.source_id)
+      .eq('done', true)
+      .gte('date', goal.start_date)
+      .lte('date', today)
+      .order('date')
+    if (error) throw error
+    months = routineMonths(data.map((row) => row.date))
+  }
+  return { months, current: goalCurrent(goal.type, months) }
+}
+
+/** One goal's progress (see fetchGoalSeries). */
 export function useGoalSeries(goal: Goal | undefined) {
   return useQuery({
     queryKey: queryKeys.goals.goalSeries(goal?.id ?? ''),
-    queryFn: async (): Promise<GoalSeries> => {
-      if (!goal) return { months: [], current: 0 }
-      const today = getToday()
-      let months: MonthValue[]
-      if (goal.source_kind === 'metric') {
-        const { data, error } = await supabase
-          .from('metric_entries')
-          .select('entry_date, value, note')
-          .eq('metric_id', goal.source_id)
-          .gte('entry_date', goal.start_date)
-          .lte('entry_date', today)
-          .order('entry_date')
-        if (error) throw error
-        months = groupByMonth(data)
-      } else {
-        const { data, error } = await supabase
-          .from('routine_checks')
-          .select('date')
-          .eq('routine_item_id', goal.source_id)
-          .eq('done', true)
-          .gte('date', goal.start_date)
-          .lte('date', today)
-          .order('date')
-        if (error) throw error
-        months = routineMonths(data.map((row) => row.date))
-      }
-      return { months, current: goalCurrent(goal.type, months) }
-    },
+    queryFn: () => (goal ? fetchGoalSeries(goal) : Promise.resolve({ months: [], current: 0 })),
     enabled: Boolean(goal),
+  })
+}
+
+/** Every goal's progress at once (goal chips, Reports). Same cache as useGoalSeries. data is undefined until all have loaded. */
+export function useGoalsSeries(goals: readonly Goal[] | undefined) {
+  return useQueries({
+    queries: (goals ?? []).map((goal) => ({
+      queryKey: queryKeys.goals.goalSeries(goal.id),
+      queryFn: () => fetchGoalSeries(goal),
+    })),
+    combine: (results) => ({
+      data: goals && results.every((r) => r.data !== undefined)
+        ? new Map((goals ?? []).map((g, i) => [g.id, results[i]?.data as GoalSeries]))
+        : undefined,
+      isError: results.some((r) => r.isError),
+      refetch: () => Promise.all(results.map((r) => r.refetch())),
+    }),
   })
 }
 
