@@ -128,7 +128,26 @@ test.describe('Today page', () => {
     await expect.poll(() => db.tasks?.find((t) => t.id === 't-lejla')?.due_date).toBe(TODAY)
   })
 
-  test('quick-add makes a task for "Just today" and a routine item otherwise', async ({ page }) => {
+  test('quick-add plans a task for tomorrow; "View" opens that day', async ({ page }) => {
+    const db = await openToday(page)
+
+    await page.getByRole('combobox', { name: 'Day' }).selectOption('tomorrow')
+    const text = page.getByRole('textbox', { name: 'Task' })
+    await text.fill('Send invoice to Nova Dental')
+    await text.press('Enter')
+
+    await expect(page.getByText('Task added for tomorrow')).toBeVisible()
+    await expect(tasksCard(page).getByText('Send invoice to Nova Dental')).toHaveCount(0)
+    await expect.poll(() => db.tasks?.find((t) => t.title === 'Send invoice to Nova Dental')?.due_date).toBe('2026-10-29')
+
+    await page.getByRole('button', { name: 'View', exact: true }).click()
+    await expect(page).toHaveURL(/day=2026-10-29/)
+    await expect(tasksCard(page).getByText('Send invoice to Nova Dental')).toBeVisible()
+    // Looking at tomorrow, the bar starts on Tomorrow.
+    await expect(page.getByRole('combobox', { name: 'Day' })).toHaveValue('tomorrow')
+  })
+
+  test('quick-add makes a one-off task for today and a routine item otherwise', async ({ page }) => {
     const db = await openToday(page)
 
     const text = page.getByRole('textbox', { name: 'Task' })

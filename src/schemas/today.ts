@@ -110,18 +110,34 @@ export type DailyLog = z.infer<typeof dailyLogSchema>
 // Forms
 // ---------------------------------------------------------------------------
 
+/** Which day a one-off task from the quick-add bar is for. */
+export const QUICK_ADD_DAYS = ['today', 'tomorrow', 'date'] as const
+export const quickAddDaySchema = z.enum(QUICK_ADD_DAYS)
+export type QuickAddDay = z.infer<typeof quickAddDaySchema>
+
 /**
- * Quick-add bar. The time input sends "" when empty; that becomes undefined.
+ * Quick-add bar. The time and date inputs send "" when empty; that becomes undefined.
+ * `date` is only needed when `day` is "date" (Pick a date) and the task doesn't repeat.
  * With React Hook Form: useForm<QuickAddFormInput, unknown, QuickAddFormValues>.
  */
-export const quickAddFormSchema = z.object({
-  text: z.string().trim().min(1, 'Type a task').max(200, 'Keep it under 200 characters'),
-  time: z
-    .union([z.literal(''), hhmmSchema])
-    .optional()
-    .transform((value) => value || undefined),
-  repeat: repeatSchema.default('just_today'),
-})
+export const quickAddFormSchema = z
+  .object({
+    text: z.string().trim().min(1, 'Type a task').max(200, 'Keep it under 200 characters'),
+    time: z
+      .union([z.literal(''), hhmmSchema])
+      .optional()
+      .transform((value) => value || undefined),
+    repeat: repeatSchema.default('just_today'),
+    day: quickAddDaySchema.default('today'),
+    date: z
+      .union([z.literal(''), dateKeySchema])
+      .optional()
+      .transform((value) => value || undefined),
+  })
+  .refine((v) => v.repeat !== 'just_today' || v.day !== 'date' || v.date !== undefined, {
+    message: 'Pick a date',
+    path: ['date'],
+  })
 export type QuickAddFormInput = z.input<typeof quickAddFormSchema>
 export type QuickAddFormValues = z.output<typeof quickAddFormSchema>
 

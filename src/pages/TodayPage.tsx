@@ -119,12 +119,20 @@ export default function TodayPage() {
       if (result.kind === 'task') {
         await createTask.mutateAsync({
           title: result.title,
-          dueDate: selected,
+          dueDate: result.dueDate,
           time: result.time,
           tag: result.tag,
           priority: result.priority ?? undefined,
         })
-        toast.success(isToday ? 'Task added' : `Task added for ${formatDate(selected)}`)
+        const dayName =
+          result.dueDate === today ? 'today' : result.dueDate === addDays(today, 1) ? 'tomorrow' : formatDate(result.dueDate)
+        if (result.dueDate === selected) {
+          toast.success(isToday ? 'Task added' : `Task added for ${dayName}`)
+        } else {
+          // Planned for another day: offer to jump there.
+          const day = result.dueDate
+          toast.success(`Task added for ${dayName}`, { action: { label: 'View', onClick: () => goTo(day) } })
+        }
       } else {
         await createRoutine.mutateAsync({ title: result.title, days: result.days, time: result.time })
         toast.success(`Repeating task added · ${formatDays(result.days)}`)
@@ -182,7 +190,7 @@ export default function TodayPage() {
             <OutreachWeekCard {...outreachWeek} />
           </>
         }
-        quickAdd={<QuickAddBar onSubmit={handleQuickAdd} />}
+        quickAdd={<QuickAddBar key={selected} onSubmit={handleQuickAdd} today={today} viewedDay={selected} />}
         main={
           <div ref={mainRef} className="contents">
             {!isToday && (

@@ -4,18 +4,21 @@ import { describe, expect, it, vi } from 'vitest'
 import type { QuickAddResult } from '@/lib/quickAddSubmit'
 import { QuickAddBar } from './QuickAddBar'
 
-function setup(onSubmit = vi.fn<(r: QuickAddResult) => void | Promise<void>>()) {
-  render(<QuickAddBar onSubmit={onSubmit} />)
+const TODAY = '2026-10-28'
+
+function setup(onSubmit = vi.fn<(r: QuickAddResult) => void | Promise<void>>(), viewedDay?: string) {
+  render(<QuickAddBar onSubmit={onSubmit} today={TODAY} viewedDay={viewedDay} />)
   return {
     onSubmit,
     text: screen.getByRole('textbox', { name: 'Task' }),
     time: screen.getByLabelText('Time (optional)'),
+    day: screen.getByRole('combobox', { name: 'Day' }),
     repeat: screen.getByRole('combobox', { name: 'Repeat' }),
   }
 }
 
 describe('QuickAddBar', () => {
-  it('submits a one-off task on Enter, then clears and keeps focus', async () => {
+  it('submits a one-off task for today on Enter, then clears and keeps focus', async () => {
     const user = userEvent.setup()
     const { onSubmit, text } = setup()
     await user.type(text, 'Call Amir about the website #outreach !high{Enter}')
@@ -25,17 +28,46 @@ describe('QuickAddBar', () => {
       time: null,
       tag: 'outreach',
       priority: 'high',
+      dueDate: TODAY,
     })
     expect(text).toHaveValue('')
     expect(text).toHaveFocus()
   })
 
-  it('uses the time field and Repeat to make a routine item', async () => {
+  it('plans a task for tomorrow and keeps Tomorrow for the next one', async () => {
     const user = userEvent.setup()
-    const { onSubmit, text, time, repeat } = setup()
+    const { onSubmit, text, day } = setup()
+    await user.selectOptions(day, 'Tomorrow')
+    await user.type(text, 'Send invoice{Enter}')
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ kind: 'task', dueDate: '2026-10-29' }))
+    expect(day).toHaveValue('tomorrow')
+  })
+
+  it('plans a task for a picked date, and asks for one if missing', async () => {
+    const user = userEvent.setup()
+    const { onSubmit, text, day } = setup()
+    await user.selectOptions(day, 'Pick a date…')
+    await user.type(text, 'Dentist{Enter}')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Pick a date')
+    expect(onSubmit).not.toHaveBeenCalled()
+
+    await user.type(screen.getByLabelText('Task date'), '2026-11-05')
+    await user.click(screen.getByRole('button', { name: 'Add task' }))
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ title: 'Dentist', dueDate: '2026-11-05' }))
+  })
+
+  it('starts on the day on screen', () => {
+    const { day } = setup(undefined, '2026-10-29')
+    expect(day).toHaveValue('tomorrow')
+  })
+
+  it('uses the time field and Repeat to make a routine item (Day is not used)', async () => {
+    const user = userEvent.setup()
+    const { onSubmit, text, time, repeat, day } = setup()
     await user.type(text, 'Read 20 pages')
     await user.type(time, '21:30')
     await user.selectOptions(repeat, 'Every day')
+    expect(day).toBeDisabled()
     await user.click(screen.getByRole('button', { name: 'Add task' }))
     expect(onSubmit).toHaveBeenCalledWith({
       kind: 'routine',

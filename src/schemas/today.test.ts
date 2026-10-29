@@ -106,6 +106,8 @@ describe('quickAddFormSchema', () => {
       text: 'Call Amir #outreach !high',
       time: undefined,
       repeat: 'just_today',
+      day: 'today',
+      date: undefined,
     })
   })
 
@@ -114,7 +116,17 @@ describe('quickAddFormSchema', () => {
       text: 'Read',
       time: '21:30',
       repeat: 'every_day',
+      day: 'today',
+      date: undefined,
     })
+  })
+
+  it('plans ahead: tomorrow, or a picked date (needed only for one-off tasks)', () => {
+    expect(quickAddFormSchema.parse({ text: 'Read', day: 'tomorrow' }).day).toBe('tomorrow')
+    expect(quickAddFormSchema.parse({ text: 'Read', day: 'date', date: '2026-11-05' }).date).toBe('2026-11-05')
+    expect(quickAddFormSchema.safeParse({ text: 'Read', day: 'date', date: '' }).error?.issues[0]?.message).toBe('Pick a date')
+    expect(quickAddFormSchema.safeParse({ text: 'Read', day: 'date', repeat: 'weekdays' }).success).toBe(true)
+    expect(quickAddFormSchema.safeParse({ text: 'Read', day: 'date', date: '2026-02-30' }).success).toBe(false)
   })
 
   it('rejects empty or too long text', () => {
