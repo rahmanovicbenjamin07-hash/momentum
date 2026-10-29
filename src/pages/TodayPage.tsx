@@ -11,7 +11,7 @@ import {
   useUpdateRoutineItem,
 } from '@/api/routine'
 import { useContacts, useUpdateContact } from '@/api/contacts'
-import { useCreateTask, useDropTask, useMoveToToday, useOverdueTasks, useToggleTask } from '@/api/tasks'
+import { useCreateTask, useDeleteTask, useDropTask, useMoveToToday, useOverdueTasks, useToggleTask } from '@/api/tasks'
 import { keepFocusPlace } from '@/app/keepFocusPlace'
 import { useOutreachWeek } from '@/app/useOutreachWeek'
 import { useTodayData } from '@/app/useTodayData'
@@ -101,6 +101,7 @@ export default function TodayPage() {
   const setMissReason = useSetMissReason()
   const moveToToday = useMoveToToday()
   const dropTask = useDropTask()
+  const deleteTask = useDeleteTask()
   const saveLog = useSaveDailyLog()
   const updateContact = useUpdateContact()
 
@@ -250,6 +251,11 @@ export default function TodayPage() {
               onRemove={(id) => {
                 keepFocus()
                 removeRoutine.mutate(id, { onSuccess: () => toast('Repeating task removed') })
+              }}
+              onDeleteTask={(item) => {
+                keepFocus()
+                const undo = deleteTask.remove(item.id)
+                if (undo) toast('Task deleted', { duration: 5000, action: { label: 'Undo', onClick: undo } })
               }}
             />
           </div>

@@ -1,6 +1,15 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { cn } from 'cn'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Progress } from '@/components/ui/progress'
 import { countTodayItems, filterTodayItems, percentDone, sortTodayItems, type TodayFilter } from '@/lib/today-list'
 import type { TodayItem } from '@/schemas/today'
@@ -13,6 +22,11 @@ type TodayTasksCardProps = RoutineEditorHandlers & {
   /** All routine items (also days they aren't scheduled), for "Edit repeating". */
   routineItems: readonly RoutineEditorItem[]
   onToggle: (item: TodayItem, done: boolean) => void
+  /**
+   * Trash button on a one-off task: delete it straight away (the page offers Undo).
+   * Repeating items ask first, then go through `onRemove`. Left out = no trash buttons.
+   */
+  onDeleteTask?: (item: TodayItem) => void
 }
 
 const FILTERS: { value: TodayFilter; label: string }[] = [
@@ -28,9 +42,30 @@ const EMPTY_TEXT: Record<TodayFilter, string> = {
 }
 
 /** "Today's tasks": one list for repeating and one-off items, with filters, progress and an edit mode. */
-export function TodayTasksCard({ items, routineItems, onToggle, onChangeDays, onChangeTime, onRemove }: TodayTasksCardProps) {
+export function TodayTasksCard({
+  items,
+  routineItems,
+  onToggle,
+  onChangeDays,
+  onChangeTime,
+  onRemove,
+  onDeleteTask,
+}: TodayTasksCardProps) {
   const [filter, setFilter] = useState<TodayFilter>('all')
   const [editing, setEditing] = useState(false)
+  /** The repeating item waiting for "Remove from your routine?". */
+  const [confirming, setConfirming] = useState<TodayItem | null>(null)
+  const pendingRemove = useRef<string | null>(null)
+  /** The trash button that opened the dialog; focus goes back to it when the dialog closes. */
+  const returnFocus = useRef<HTMLElement | null>(null)
+
+  const handleDelete = onDeleteTask
+    ? (item: TodayItem) => {
+        if (item.kind !== 'routine') return onDeleteTask(item)
+        returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+        setConfirming(item)
+      }
+    : undefined
 
   const counts = countTodayItems(items)
   const visible = sortTodayItems(filterTodayItems(items, filter))
@@ -98,10 +133,47 @@ export function TodayTasksCard({ items, routineItems, onToggle, onChangeDays, on
       ) : (
         <ul aria-label="Tasks">
           {visible.map((item) => (
-            <TaskRow key={`${item.kind}-${item.id}`} item={item} onToggle={onToggle} />
+            <TaskRow key={`${item.kind}-${item.id}`} item={item} onToggle={onToggle} onDelete={handleDelete} />
           ))}
         </ul>
       )}
+
+      <Dialog open={confirming !== null} onOpenChange={(open) => !open && setConfirming(null)}>
+        <DialogContent
+          showCloseButton={false}
+          onCloseAutoFocus={(event) => {
+            // There's no DialogTrigger, so put focus back on the trash button ourselves
+            // (Radix would otherwise drop it on the page body).
+            event.preventDefault()
+            returnFocus.current?.focus()
+            returnFocus.current = null
+            // Remove only now that focus is back in the row, so the page can move it to
+            // the next row when the item disappears (keyboard users stay in place).
+            const id = pendingRemove.current
+            pendingRemove.current = null
+            if (id) onRemove(id)
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Remove ‘{confirming?.title}’ from your routine?</DialogTitle>
+            <DialogDescription>Past days stay in your stats.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button
+              className="bg-bad text-white hover:bg-bad/90"
+              onClick={() => {
+                pendingRemove.current = confirming?.id ?? null
+                setConfirming(null)
+              }}
+            >
+              Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }

@@ -113,6 +113,25 @@ import { RoutineConsistency } from '@/components/reports/RoutineConsistency'
 import { ShareCard } from '@/components/reports/ShareCard'
 import { mockGoalStatuses, mockLessons, mockMonthReport, mockYearReport } from '@/mocks/reports'
 import { MOCK_ROUTINE_MONTH, MOCK_ROUTINE_YEAR, mockRoutineCards, mockWakeUpStats } from '@/mocks/routine'
+import { GoalChips } from '@/components/goals/GoalChips'
+import { GoalHeader } from '@/components/goals/GoalHeader'
+import { PipelineToggle } from '@/components/goals/PipelineToggle'
+import { GoalChart } from '@/components/goals/GoalChart'
+import { NewGoalDialog } from '@/components/goals/NewGoalDialog'
+import { PaceSlider } from '@/components/goals/PaceSlider'
+import { buildGoalChart, forecastSentence, formatGoalValue, neededSentence } from '@/lib/goalChart'
+import { DAYS_PER_MONTH } from '@/lib/forecast'
+import { daysBetween } from '@/lib/dates'
+import {
+  MOCK_GOALS_TODAY,
+  mockGoalChips,
+  mockGoalSources,
+  mockMoneyGoalChart,
+  mockMoneyGoalHeader,
+  mockMoneyGoalMonths,
+  mockPipelineDeals,
+  mockPipelineTotal,
+} from '@/mocks/goals'
 import {
   MOCK_STATS_TODAY,
   mockCompletion,
@@ -657,6 +676,126 @@ function MetricsDemo() {
   )
 }
 
+/** Goals page top: chips, then the money goal's header and pipeline box, with local state. */
+function GoalsDemo() {
+  const [selected, setSelected] = useState('g-money')
+  const [pipeline, setPipeline] = useState(true)
+  const header = mockMoneyGoalHeader
+  return (
+    <div className="flex flex-col gap-4">
+      <GoalChips
+        goals={mockGoalChips}
+        selectedId={selected}
+        onSelect={(id) => {
+          setSelected(id)
+          log('goal')(id)
+        }}
+      />
+      <div className="flex flex-col gap-4 rounded-[10px] border border-border bg-card p-6">
+        <GoalHeader
+          sourceLine={header.sourceLine}
+          title={header.title}
+          progressText={pipeline ? header.progressText : header.progressTextNoPipeline}
+          status={header.status}
+        />
+        <PipelineToggle
+          checked={pipeline}
+          onChange={(value) => {
+            setPipeline(value)
+            log('count pipeline')(value)
+          }}
+          total={mockPipelineTotal}
+          deals={mockPipelineDeals}
+        />
+        <PipelineToggle checked={false} onChange={log('count pipeline')} total={0} deals={[]} />
+      </div>
+      <div className="w-[320px] max-w-full rounded-xl border border-dashed border-border p-2">
+        <p className="mb-2 text-xs text-ink-3">Narrow box: chips scroll sideways</p>
+        <GoalChips goals={mockGoalChips} selectedId="g-trainings" onSelect={log('goal')} />
+      </div>
+    </div>
+  )
+}
+
+const eurValue = (v: number) => formatGoalValue(v, 'eur')
+const eurTick = (v: number) => (v === 0 ? '€0' : `€${v / 1000}k`)
+
+/** Goal chart + pace slider with local state: move the slider (ghost line appears), tick the pipeline box. */
+function GoalChartDemo() {
+  const { startDate, deadline, target, realPace, pace: range } = mockMoneyGoalChart
+  const [pace, setPace] = useState(realPace)
+  const [countPipeline, setCountPipeline] = useState(true)
+  const [newOpen, setNewOpen] = useState(false)
+  const today = MOCK_GOALS_TODAY
+
+  // Simple stand-ins for the goals logic, so the demo reacts to the slider.
+  const current = mockMoneyGoalMonths.reduce((sum, m) => sum + m.value, 0)
+  const pipeline = countPipeline ? mockPipelineTotal : 0
+  const remaining = Math.max(0, target - current - pipeline)
+  const finishDate = pace > 0 ? addDays(today, Math.round((remaining / pace) * DAYS_PER_MONTH)) : null
+  const neededPace = Math.round(remaining / (daysBetween(today, deadline) / DAYS_PER_MONTH))
+
+  const chart = buildGoalChart({
+    months: mockMoneyGoalMonths,
+    startDate,
+    deadline,
+    today,
+    target,
+    pace,
+    realPace,
+    pipeline,
+    finishDate,
+  })
+
+  return (
+    <div className="flex flex-col gap-4 rounded-[10px] border border-border bg-card p-6">
+      <PipelineToggle checked={countPipeline} onChange={setCountPipeline} total={mockPipelineTotal} deals={mockPipelineDeals} />
+      <div>
+        <p className="text-lg font-semibold text-foreground">
+          {forecastSentence({
+            type: 'total',
+            unit: 'eur',
+            target,
+            pace,
+            custom: pace !== realPace,
+            finishDate,
+            deadline,
+            reached: false,
+            pipeline,
+          })}
+        </p>
+        <p className="mt-1 text-[13px] text-ink-2">{neededSentence({ unit: 'eur', neededPace, deadline })}</p>
+      </div>
+      <GoalChart chart={chart} formatY={eurValue} formatTick={eurTick} />
+      <PaceSlider
+        value={pace}
+        min={range.min}
+        max={range.max}
+        step={range.step}
+        neededPace={neededPace}
+        formatValue={eurValue}
+        onChange={setPace}
+        onReset={() => setPace(realPace)}
+      />
+      <Button className="w-fit" onClick={() => setNewOpen(true)}>
+        New goal
+      </Button>
+      <NewGoalDialog
+        open={newOpen}
+        onOpenChange={setNewOpen}
+        sources={mockGoalSources}
+        today={today}
+        onSubmit={async (values) => {
+          await new Promise((resolve) => setTimeout(resolve, 300))
+          if (values.title.includes('fail')) throw new Error("Couldn't save. Check your connection and try again.")
+          log('goal created')(values)
+          setNewOpen(false)
+        }}
+      />
+    </div>
+  )
+}
+
 /** Stats page top: summary line, title, range toggle, Export CSV, tabs and the six KPI cards. */
 function StatsHeaderDemo() {
   const [range, setRange] = useState<StatsRange>(30)
@@ -1002,6 +1141,16 @@ export default function DevPreview() {
             <FunnelBars steps={[]} />
             <ReplyRateBars rows={[]} />
           </div>
+        </Section>
+
+        <Section title="Goals: chips, header, pipeline box (click chips or Tab + ← → Home End; tick the box to change the progress text)">
+          <div className="rounded-xl border border-dashed border-border p-4">
+            <GoalsDemo />
+          </div>
+        </Section>
+
+        <Section title="Goals: chart, pace slider, New goal dialog (drag the slider — ghost line shows your real pace; untick deals; 'fail' in the goal name shows an error)">
+          <GoalChartDemo />
         </Section>
 
         <Section title="Flame (all six streak levels)">

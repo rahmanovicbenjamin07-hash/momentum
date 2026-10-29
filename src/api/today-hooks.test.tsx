@@ -9,14 +9,15 @@ import { toDailyLogPatch } from './dailyLog'
 import { queryKeys } from './keys'
 import { nextPosition, toDbTime } from './optimistic'
 import { applyCheckChange, checksKeyCovers, useToggleRoutineCheck } from './routine'
-import { buildTask, patchTask, useCreateTask, useMoveToToday, withoutTask } from './tasks'
+import { buildTask, patchTask, restoreIntoList, useCreateTask, useDeleteTask, useMoveToToday, withoutTask } from './tasks'
 
 // --- fake Supabase: each test decides what the next write resolves to -------
-type WriteResult = Promise<{ error: { message: string } | null }>
+type WriteResult = Promise<{ error: { message: string; code?: string } | null }>
 const db = vi.hoisted(() => ({
   upsert: vi.fn<(row: unknown, options?: unknown) => WriteResult>(),
   insert: vi.fn<(row: unknown) => WriteResult>(),
   update: vi.fn<(patch: unknown, id: string) => WriteResult>(),
+  delete: vi.fn<(id: string) => WriteResult>(),
 }))
 vi.mock('@/lib/supabase', () => ({
   supabase: {
@@ -24,6 +25,7 @@ vi.mock('@/lib/supabase', () => ({
       upsert: db.upsert,
       insert: db.insert,
       update: (patch: unknown) => ({ eq: (_col: string, id: string) => db.update(patch, id) }),
+      delete: () => ({ eq: (_col: string, id: string) => db.delete(id) }),
     }),
   },
 }))
@@ -249,5 +251,107 @@ describe('useMoveToToday', () => {
       { ...old, due_date: '2026-10-28' },
     ])
     expect(db.update).toHaveBeenCalledWith({ due_date: '2026-10-28' }, ITEM_ID)
+  })
+})
+
+describe('restoreIntoList', () => {
+  const t = task({ due_date: '2026-10-25', contact_id: 'c-1' })
+
+  it('puts the task back into its day, its lead and the overdue list only', () => {
+    expect(restoreIntoList([], queryKeys.today.tasks('2026-10-25'), t)).toEqual([t])
+    expect(restoreIntoList([], queryKeys.today.tasks('2026-10-28'), t)).toEqual([])
+    expect(restoreIntoList([], queryKeys.today.contactTasks('c-1'), t)).toEqual([t])
+    expect(restoreIntoList([], queryKeys.today.contactTasks('c-2'), t)).toEqual([])
+    expect(restoreIntoList([], queryKeys.today.overdueTasks('2026-10-28'), t)).toEqual([t])
+    expect(restoreIntoList([], queryKeys.today.overdueTasks('2026-10-25'), t)).toEqual([])
+    expect(restoreIntoList([], queryKeys.today.overdueTasks('2026-10-28'), { ...t, status: 'done' })).toEqual([])
+  })
+
+  it('never adds it twice', () => {
+    expect(restoreIntoList([t], queryKeys.today.tasks('2026-10-25'), t)).toEqual([t])
+  })
+})
+
+describe('useDeleteTask', () => {
+  const dayKey = queryKeys.today.tasks('2026-10-28')
+  const leadKey = queryKeys.today.contactTasks('c-1')
+  const done = task({ status: 'done', completed_at: '2026-10-28T08:00:00.000Z', contact_id: 'c-1' })
+  const other = task({ id: '11111111-2222-4333-8444-555555555555', title: 'Other' })
+
+  it('removes the task everywhere at once, and undo puts back the exact same row', async () => {
+    const { queryClient, wrapper } = setup()
+    queryClient.setQueryData<Task[]>(dayKey, [done, other])
+    queryClient.setQueryData<Task[]>(leadKey, [done])
+    db.delete.mockResolvedValue({ error: null })
+    db.insert.mockResolvedValue({ error: null })
+
+    const { result } = renderHook(() => useDeleteTask(), { wrapper })
+    let undo: (() => void) | null = null
+    act(() => {
+      undo = result.current.remove(ITEM_ID)
+    })
+
+    await waitFor(() => expect(queryClient.getQueryData<Task[]>(dayKey)).toEqual([other]))
+    expect(queryClient.getQueryData<Task[]>(leadKey)).toEqual([])
+    await waitFor(() => expect(db.delete).toHaveBeenCalledWith(ITEM_ID))
+
+    act(() => undo?.())
+    await waitFor(() => expect(db.insert).toHaveBeenCalled())
+    expect(queryClient.getQueryData<Task[]>(dayKey)?.map((t) => t.id)).toEqual([other.id, ITEM_ID])
+    expect(queryClient.getQueryData<Task[]>(leadKey)).toEqual([done])
+    expect(db.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: ITEM_ID,
+        created_at: done.created_at,
+        status: 'done',
+        completed_at: '2026-10-28T08:00:00.000Z',
+        contact_id: 'c-1',
+      }),
+    )
+  })
+
+  it('brings the task back with a toast when the delete fails', async () => {
+    const { queryClient, wrapper } = setup()
+    queryClient.setQueryData<Task[]>(dayKey, [done])
+    db.delete.mockResolvedValue({ error: { message: 'network down' } })
+
+    const { result } = renderHook(() => useDeleteTask(), { wrapper })
+    act(() => {
+      result.current.remove(ITEM_ID)
+    })
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith("Couldn't delete the task. Try again."))
+    expect(queryClient.getQueryData<Task[]>(dayKey)).toEqual([done])
+  })
+
+  it('undo waits for a delete that is still saving', async () => {
+    const { queryClient, wrapper } = setup()
+    queryClient.setQueryData<Task[]>(dayKey, [done])
+    const slowDelete = deferred<{ error: null }>()
+    db.delete.mockReturnValue(slowDelete.promise)
+    db.insert.mockResolvedValue({ error: null })
+
+    const { result } = renderHook(() => useDeleteTask(), { wrapper })
+    let undo: (() => void) | null = null
+    act(() => {
+      undo = result.current.remove(ITEM_ID)
+    })
+    await waitFor(() => expect(queryClient.getQueryData<Task[]>(dayKey)).toEqual([]))
+    act(() => undo?.())
+
+    // Not inserted before the delete has landed.
+    await new Promise((r) => setTimeout(r, 20))
+    expect(db.insert).not.toHaveBeenCalled()
+
+    slowDelete.resolve({ error: null })
+    await waitFor(() => expect(db.insert).toHaveBeenCalledTimes(1))
+    expect(toastError).not.toHaveBeenCalled()
+  })
+
+  it('returns null for a task that is not loaded', () => {
+    const { wrapper } = setup()
+    const { result } = renderHook(() => useDeleteTask(), { wrapper })
+    expect(result.current.remove(ITEM_ID)).toBeNull()
+    expect(db.delete).not.toHaveBeenCalled()
   })
 })

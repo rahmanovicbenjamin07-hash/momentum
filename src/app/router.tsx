@@ -8,7 +8,10 @@ import ContactPage from '@/pages/ContactPage'
 import OutreachPage from '@/pages/OutreachPage'
 import SettingsPage from '@/pages/SettingsPage'
 import StatsPage from '@/pages/StatsPage'
-import StatsTabPage from '@/pages/StatsTabPage'
+import MetricsTab from '@/pages/stats/MetricsTab'
+import OverviewTab from '@/pages/stats/OverviewTab'
+import ReportsTab from '@/pages/stats/ReportsTab'
+import RoutineTab from '@/pages/stats/RoutineTab'
 import TodayPage from '@/pages/TodayPage'
 import AppLayout from './AppLayout'
 import { AuthProvider } from './AuthProvider'
@@ -44,10 +47,10 @@ export const routes: RouteObject[] = [
                 element: <StatsPage />,
                 children: [
                   { index: true, element: <Navigate to="overview" replace /> },
-                  { path: 'overview', element: <StatsTabPage label="Overview" /> },
-                  { path: 'metrics', element: <StatsTabPage label="Metrics" /> },
-                  { path: 'routine', element: <StatsTabPage label="Routine" /> },
-                  { path: 'reports', element: <StatsTabPage label="Reports" /> },
+                  { path: 'overview', element: <OverviewTab /> },
+                  { path: 'metrics', element: <MetricsTab /> },
+                  { path: 'routine', element: <RoutineTab /> },
+                  { path: 'reports', element: <ReportsTab /> },
                 ],
               },
               { path: 'goals', element: <GoalsPage /> },

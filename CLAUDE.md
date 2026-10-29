@@ -33,3 +33,9 @@ Prompts start with a tag: [LOGIC], [DATA], [UI] or [WIRE]. Stay in your lane:
 - [UI]: only src/components/**, src/mocks/**, src/pages/DevPreview.tsx. Components get data as props and send actions as callbacks. Show each new one on /dev with mock data.
 - [WIRE]: src/pages/**, src/app/**, e2e/**, small fixes anywhere.
 Rules: no plan, just do it, then reply in max 5 lines. Don't install packages or edit config files. Don't start the dev server; only [WIRE] runs Playwright. Run typecheck, lint and your own tests; ignore errors in other lanes' files. Don't commit. If you need a file from another lane that doesn't exist yet, stop and tell me.
+
+## Token rules
+- Read only the files the prompt lists. Don't open docs/ or design images unless listed. Don't search the whole repo.
+- If something you need isn't in the listed files, read at most 2 more files and say which.
+- Run only the tests the prompt names; the full suite runs only in the commit prompt.
+- Reply in max 5 lines.

@@ -122,6 +122,16 @@ export function computeStreak(days: readonly StreakDay[], today: DateKey): Strea
   return { days: count, todayCounted, lastCountedDate, forgivenDates }
 }
 
+/**
+ * Longest streak inside `days` (same rules as computeStreak: one forgiven day per week).
+ * Days outside the list don't count, so pass e.g. one month to get that month's best.
+ */
+export function longestStreak(days: readonly StreakDay[]): number {
+  let best = 0
+  for (const day of days) best = Math.max(best, computeStreak(days, day.date).days)
+  return best
+}
+
 // ---------------------------------------------------------------------------
 // Tiers (levels + progress to the next one)
 // ---------------------------------------------------------------------------

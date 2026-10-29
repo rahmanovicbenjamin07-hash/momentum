@@ -352,3 +352,24 @@ export function insights({ days, wakeTitle, sentMessages, tasks, timeZone }: Ins
     lowEnergyInsight(days),
   ].filter((i): i is Insight => i !== null)
 }
+
+/**
+ * The weekday with the highest average completion, as a sentence for the
+ * Consistency card: "Tuesdays are your strongest day (88% done on average)."
+ * Days with nothing planned (null) are skipped. Needs 2 weeks of data on at
+ * least 2 weekdays; null otherwise or when every weekday ties.
+ */
+export function strongestWeekday(days: readonly { date: DateKey; rate: number | null }[]): string | null {
+  const byDay = Array.from({ length: 7 }, () => [] as number[])
+  for (const d of days) {
+    if (d.rate !== null) byDay[dayIndex(d.date)]?.push(d.rate)
+  }
+  const ranked = byDay
+    .map((rates, weekday) => ({ weekday, rates }))
+    .filter((d) => d.rates.length >= 2)
+    .map(({ weekday, rates }) => ({ weekday, avg: rates.reduce((a, b) => a + b, 0) / rates.length }))
+  if (ranked.length < 2) return null
+  const best = ranked.reduce((a, b) => (b.avg > a.avg ? b : a))
+  if (ranked.every((d) => d.avg === best.avg)) return null
+  return `${WEEKDAY_NAMES[best.weekday]}s are your strongest day (${formatPercent(best.avg)} done on average).`
+}

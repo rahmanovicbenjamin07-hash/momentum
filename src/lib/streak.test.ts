@@ -5,6 +5,7 @@ import {
   computeStreak,
   getStreakTier,
   legendMilestoneAfter,
+  longestStreak,
   type StreakDay,
   type StreakRoutineItem,
 } from './streak'
@@ -209,5 +210,19 @@ describe('legendMilestoneAfter', () => {
     expect(legendMilestoneAfter(365)).toBe(730)
     expect(legendMilestoneAfter(729)).toBe(730)
     expect(legendMilestoneAfter(730)).toBe(1095)
+  })
+})
+
+describe('longestStreak', () => {
+  it('finds the best run, with one forgiven day per week', () => {
+    // 19–28 Oct: two misses in the week of 19–25 Oct break it; the run after is 24–28 Oct.
+    expect(longestStreak(history(WED, 'yyynnyyyyy'))).toBe(5)
+    // One miss on Mon 26 Oct is forgiven: 19–28 Oct counts 9 days.
+    expect(longestStreak(history(WED, 'yyyyyyynyy'))).toBe(9)
+  })
+
+  it('is 0 with nothing done', () => {
+    expect(longestStreak([])).toBe(0)
+    expect(longestStreak(history(WED, 'nn'))).toBe(0)
   })
 })

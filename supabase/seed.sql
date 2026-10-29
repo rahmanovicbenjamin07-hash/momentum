@@ -579,3 +579,79 @@ begin
     (select count(*) from public.metric_entries where user_id = v_user);
 end;
 $$;
+
+-- =============================================================================
+-- Goals demo data (Phase 4).
+--
+-- What you get: 5 goals on the built-in metrics and the "Wake up" routine item:
+--   €18k in 2026 (counts open deals too) · 150 trainings · 1,650 hours ·
+--   200 early mornings · one €3k month.
+--
+-- Skips itself if your account already has goals.
+-- Needs the goals migration (20261029100000_goals.sql) pushed first, and the
+-- metrics / routine item it points at (the Today and metrics parts above make them).
+-- =============================================================================
+do $$
+declare
+  -- Only needed if the project has more than one user: put your login email here.
+  v_email text := null;
+
+  v_user uuid;
+  v_user_count int;
+  v_money uuid;
+  v_trainings uuid;
+  v_hours uuid;
+  v_wake uuid;
+begin
+  -- ---------------------------------------------------------------------------
+  -- Whose account? (same rules as the other parts)
+  -- ---------------------------------------------------------------------------
+  if v_email is not null then
+    select id into v_user from auth.users where lower(email) = lower(v_email);
+    if v_user is null then
+      raise exception 'No user with email %. Check the spelling, or sign in to the app once first.', v_email;
+    end if;
+  else
+    select count(*) into v_user_count from auth.users;
+    if v_user_count = 0 then
+      raise notice 'Goals seed skipped: no users yet. Sign in to the app once, then run this file again.';
+      return;
+    elsif v_user_count > 1 then
+      raise exception 'This project has % users. Set v_email at the top of every seed block to your login email.', v_user_count;
+    end if;
+    select id into v_user from auth.users;
+  end if;
+
+  if exists (select 1 from public.goals where user_id = v_user) then
+    raise notice 'Goals seed skipped: this account already has goals. Nothing was changed.';
+    return;
+  end if;
+
+  -- ---------------------------------------------------------------------------
+  -- What the goals are measured on (by name, ignoring case and spaces).
+  -- ---------------------------------------------------------------------------
+  select id into v_money     from public.metrics where user_id = v_user and lower(trim(name)) = 'money earned';
+  select id into v_trainings from public.metrics where user_id = v_user and lower(trim(name)) = 'trainings';
+  select id into v_hours     from public.metrics where user_id = v_user and lower(trim(name)) = 'hours worked';
+  select id into v_wake      from public.routine_items
+   where user_id = v_user and lower(trim(title)) = 'wake up'
+   order by created_at limit 1;
+
+  if v_money is null or v_trainings is null or v_hours is null or v_wake is null then
+    raise notice 'Goals seed skipped: missing the Money earned / Trainings / Hours worked metric or the "Wake up" routine item. Nothing was changed.';
+    return;
+  end if;
+
+  insert into public.goals
+    (user_id, title, short_label, type, source_kind, source_id, target, start_date, deadline, include_pipeline)
+  values
+    (v_user, 'Earn €18,000 in 2026',     '€18k in 2026',       'total', 'metric',  v_money,     18000, date '2026-01-01', date '2027-01-01', true),
+    (v_user, '150 trainings in 2026',    '150 trainings',      'total', 'metric',  v_trainings,   150, date '2026-01-01', date '2026-12-31', false),
+    (v_user, '1,650 hours in 2026',      '1,650 hours',        'total', 'metric',  v_hours,      1650, date '2026-01-01', date '2026-12-31', false),
+    (v_user, 'Wake up on 200 days',      '200 early mornings', 'total', 'routine', v_wake,        200, date '2026-01-01', date '2026-12-31', false),
+    (v_user, '€3,000 in a single month', '€3k month',          'level', 'metric',  v_money,      3000, date '2026-01-01', date '2027-06-30', false);
+
+  raise notice 'Goals demo data added for user %: % goals.', v_user,
+    (select count(*) from public.goals where user_id = v_user);
+end;
+$$;

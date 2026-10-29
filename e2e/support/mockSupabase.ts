@@ -2,12 +2,15 @@ import type { Page, Route } from '@playwright/test'
 
 /**
  * A tiny in-memory stand-in for Supabase, so e2e tests run without a real project.
- * Supports what the app uses: GET with eq/neq/lt/gte/lte/is filters, insert, upsert, update and delete.
+ * Supports what the app uses: GET with eq/neq/lt/gte/lte/is filters, insert, upsert, update, delete
+ * and SQL function calls (rpc), which answer from the handlers you pass (or [] by default).
  * It does NOT check security (RLS); that is tested against the real database.
  */
 
 export type Row = Record<string, unknown>
 export type MockDb = Record<string, Row[]>
+/** Answers one SQL function call: receives its arguments (e.g. { p_from, p_to }) and the db. */
+export type RpcHandler = (args: Row, db: MockDb) => unknown
 
 export const TEST_USER = { id: '00000000-0000-4000-8000-000000000001', email: 'test@example.com' }
 
@@ -110,8 +113,13 @@ function respond(route: Route, status: number, body?: unknown) {
  * Signs in a fake user and serves `db` as the database. Returns `db`, which changes as the app writes.
  * Pass `now` when the test fixes the browser clock, so server-made timestamps
  * (created_at, completed_at) match the page's "today" instead of the real date.
+ * Pass `rpc` to answer SQL function calls by name; any other function returns [].
  */
-export async function mockSupabase(page: Page, db: MockDb, options: { now?: Date } = {}): Promise<MockDb> {
+export async function mockSupabase(
+  page: Page,
+  db: MockDb,
+  options: { now?: Date; rpc?: Record<string, RpcHandler> } = {},
+): Promise<MockDb> {
   const nowIso = () => (options.now ?? new Date()).toISOString()
   const session = {
     access_token: 'test-access-token',
@@ -141,6 +149,11 @@ export async function mockSupabase(page: Page, db: MockDb, options: { now?: Date
 
     const url = new URL(request.url())
     const table = url.pathname.replace('/rest/v1/', '')
+    if (table.startsWith('rpc/')) {
+      const args = (request.postDataJSON() ?? {}) as Row
+      const handler = options.rpc?.[table.slice('rpc/'.length)]
+      return respond(route, 200, handler ? handler(args, db) : [])
+    }
     const rows = (db[table] ??= [])
     const params = url.searchParams
     const wantsObject = (request.headers()['accept'] ?? '').includes('vnd.pgrst.object')

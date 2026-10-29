@@ -235,6 +235,75 @@ test.describe('Today page', () => {
     await expect(card.getByText('Read 20 pages')).toBeHidden()
   })
 
+  test('deletes a one-off task with Undo, and asks before removing a repeating one', async ({ page }) => {
+    const db = await openToday(page)
+    const card = tasksCard(page)
+    const row = (title: string) => card.getByRole('listitem').filter({ hasText: title })
+    const portfolio = row('Update portfolio')
+    const trash = portfolio.getByRole('button', { name: 'Delete task' })
+
+    // With a mouse the trash button only shows when the row is hovered.
+    await expect(trash).toHaveCSS('opacity', '0')
+    await portfolio.hover()
+    await expect(trash).toHaveCSS('opacity', '1')
+
+    // One-off: gone at once, Undo brings back the same task (still done).
+    await trash.click()
+    await expect(portfolio).toBeHidden()
+    await expect(page.getByText('Task deleted')).toBeVisible()
+    await expect.poll(() => db.tasks?.some((t) => t.id === 't-portfolio')).toBe(false)
+
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect(portfolio).toBeVisible()
+    await expect(page.getByRole('checkbox', { name: 'Update portfolio' })).toBeChecked()
+    await expect.poll(() => db.tasks?.find((t) => t.id === 't-portfolio')?.status).toBe('done')
+
+    // Repeating: asks first. Cancel keeps it, Remove takes it off the routine (past days stay).
+    const wake = row('Wake up')
+    await wake.hover()
+    await wake.getByRole('button', { name: 'Delete task' }).click()
+    const dialog = page.getByRole('dialog', { name: /Remove ‘Wake up’ from your routine\?/ })
+    await expect(dialog).toContainText('Past days stay in your stats.')
+    await dialog.getByRole('button', { name: 'Cancel' }).click()
+    await expect(dialog).toBeHidden()
+    await expect(wake).toBeVisible()
+
+    await wake.hover()
+    await wake.getByRole('button', { name: 'Delete task' }).click()
+    await dialog.getByRole('button', { name: 'Remove' }).click()
+    await expect(wake).toBeHidden()
+    await expect.poll(() => db.routine_items?.find((r) => r.id === 'r-wake')?.active).toBe(false)
+    expect(db.routine_checks?.some((c) => c.routine_item_id === 'r-wake')).toBe(true)
+  })
+
+  test('deletes a task with the keyboard and keeps focus in the list', async ({ page }) => {
+    await openToday(page)
+    const card = tasksCard(page)
+    const trash = card.getByRole('listitem').filter({ hasText: 'Read 20 pages' }).getByRole('button', { name: 'Delete task' })
+
+    // Keyboard focus shows the button.
+    await trash.focus()
+    await expect(trash).toHaveCSS('opacity', '1')
+    const dialog = page.getByRole('dialog')
+
+    // Escape closes the dialog and focus goes back to the trash button.
+    await page.keyboard.press('Enter')
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeHidden()
+    await expect(trash).toBeFocused()
+
+    // Remove: focus lands on the same button in the next row, not the top of the page.
+    await page.keyboard.press('Enter')
+    await page.keyboard.press('Tab')
+    await expect(dialog.getByRole('button', { name: 'Remove' })).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(card.getByText('Read 20 pages')).toBeHidden()
+    await expect(
+      card.getByRole('listitem').filter({ hasText: 'Update portfolio' }).getByRole('button', { name: 'Delete task' }),
+    ).toBeFocused()
+  })
+
   test('saves the daily note and energy', async ({ page }) => {
     const db = await openToday(page)
 
@@ -263,6 +332,8 @@ test('Today page fits a phone screen', async ({ page, isMobile }) => {
   test.skip(!isMobile, 'Phone only')
   await openToday(page)
   await expect(page.getByRole('region', { name: 'Today’s progress' })).toBeVisible()
+  // No hover on a touch screen, so the trash buttons are always shown.
+  await expect(tasksCard(page).getByRole('button', { name: 'Delete task' }).first()).toHaveCSS('opacity', '1')
   // A string so this file doesn't need browser types; > 0 means the page scrolls sideways.
   const overflow = Number(await page.evaluate('document.documentElement.scrollWidth - window.innerWidth'))
   expect(overflow).toBeLessThanOrEqual(0)

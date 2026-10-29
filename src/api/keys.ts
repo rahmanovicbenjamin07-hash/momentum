@@ -15,6 +15,7 @@ type IsoDate = string
 const today = ['today'] as const
 const outreach = ['outreach'] as const
 const stats = ['stats'] as const
+const goals = ['goals'] as const
 
 /** Filters for the contacts list. Only server-side filters belong here; keep it a plain, serialisable object. */
 export type ContactFilters = {
@@ -75,5 +76,15 @@ export const queryKeys = {
     routineDays: (from: IsoDate, to: IsoDate) => [...stats, 'routineDays', from, to] as const,
     // Prefix: every cached metric's entries.
     metricEntriesAll: () => [...stats, 'metricEntries'] as const,
+  },
+  /** Goals page. A goal's progress reads metric entries / routine ticks, so it refetches when the page opens. */
+  goals: {
+    all: goals,
+    goals: () => [...goals, 'list'] as const,
+    goalSeries: (goalId: string) => [...goals, 'series', goalId] as const,
+    /** Open deals with a value (contacts in contacted → proposal), for "include pipeline". */
+    openDeals: () => [...goals, 'openDeals'] as const,
+    // Prefix: every goal's series.
+    goalSeriesAll: () => [...goals, 'series'] as const,
   },
 } as const

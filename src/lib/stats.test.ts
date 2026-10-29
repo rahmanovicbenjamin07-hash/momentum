@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { addDays } from './dates'
 import {
   bestReplyKey,
   findWakeItem,
@@ -14,6 +15,7 @@ import {
   replyRate,
   replyRatesBy,
   replyWeekdayInsight,
+  strongestWeekday,
   timedTasksInsight,
   wakeInsight,
   type InsightDay,
@@ -254,5 +256,23 @@ describe('insights', () => {
   it('returns the sentences in a fixed order and leaves out ones without data', () => {
     const result = insights({ days: wakeDays(), wakeTitle: 'Wake up at 06:00', sentMessages: [], tasks: [] })
     expect(result.map((i) => i.id)).toEqual(['wake'])
+  })
+})
+
+describe('strongestWeekday', () => {
+  it('names the weekday with the best average', () => {
+    // Two weeks from Mon 19 Oct: Tuesdays 0.9 and 0.86, the rest 0.5; Sundays had nothing planned.
+    const days = Array.from({ length: 14 }, (_, i) => {
+      const date = addDays('2026-10-19', i)
+      const weekday = i % 7
+      return { date, rate: weekday === 6 ? null : weekday === 1 ? (i < 7 ? 0.9 : 0.86) : 0.5 }
+    })
+    expect(strongestWeekday(days)).toBe('Tuesdays are your strongest day (88% done on average).')
+  })
+
+  it('needs at least two weeks and a difference', () => {
+    expect(strongestWeekday([{ date: '2026-10-19', rate: 1 }, { date: '2026-10-20', rate: 0.5 }])).toBeNull()
+    const flat = Array.from({ length: 14 }, (_, i) => ({ date: addDays('2026-10-19', i), rate: 0.7 }))
+    expect(strongestWeekday(flat)).toBeNull()
   })
 })

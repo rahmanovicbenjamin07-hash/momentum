@@ -143,6 +143,51 @@ export type Database = {
         }
         Relationships: []
       }
+      goals: {
+        Row: {
+          created_at: string
+          deadline: string
+          id: string
+          include_pipeline: boolean
+          short_label: string
+          source_id: string
+          source_kind: string
+          start_date: string
+          target: number
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deadline: string
+          id?: string
+          include_pipeline?: boolean
+          short_label: string
+          source_id: string
+          source_kind?: string
+          start_date?: string
+          target: number
+          title: string
+          type?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          deadline?: string
+          id?: string
+          include_pipeline?: boolean
+          short_label?: string
+          source_id?: string
+          source_kind?: string
+          start_date?: string
+          target?: number
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       metric_entries: {
         Row: {
           contact_id: string | null

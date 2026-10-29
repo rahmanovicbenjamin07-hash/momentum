@@ -1,4 +1,4 @@
-import { useMutation, useQueries, useQuery, useQueryClient, type MutateOptions } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient, type MutateOptions, type QueryClient, type QueryKey } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useAuth } from '@/app/auth-context'
 import type { DateKey } from '@/lib/dates'
@@ -284,4 +284,113 @@ export function useDropTask() {
     apply: (id) => ({ tasks: (list) => withoutTask(list, id), overdue: (list) => withoutTask(list, id) }),
     errorMessage: "Couldn't drop the task. Try again.",
   })
+}
+
+// ===========================================================================
+// Delete (with undo)
+// ===========================================================================
+
+/**
+ * Delete and its undo run one after the other (same scope), so an Undo pressed
+ * while the delete is still saving can't insert before the delete lands.
+ */
+const deleteScope = { id: 'tasks-delete' }
+
+/** The full cached row of a task (any day list, a lead's list or the overdue list), for undo. */
+export function findCachedTask(queryClient: QueryClient, id: string): Task | undefined {
+  for (const prefix of [tasksPrefix, overduePrefix]) {
+    for (const [, list] of queryClient.getQueriesData<Task[]>({ queryKey: prefix })) {
+      const task = list?.find((t) => t.id === id)
+      if (task) return task
+    }
+  }
+  return undefined
+}
+
+/**
+ * Puts a deleted task back into the cached list it belongs in:
+ * its day, its lead's list, and the overdue list when it's unfinished and from before that "today".
+ * Lists that already have it are left alone.
+ */
+export function restoreIntoList(list: Task[], key: QueryKey, task: Task): Task[] {
+  if (list.some((t) => t.id === task.id)) return list
+  const [, kind, a, b] = key
+  const belongs =
+    kind === 'tasks'
+      ? a === 'contact'
+        ? b === task.contact_id
+        : a === task.due_date
+      : kind === 'overdueTasks' && typeof a === 'string' && task.status === 'todo' && task.due_date < a
+  return belongs ? [...list, task] : list
+}
+
+/**
+ * Deletes a one-off task for good. `remove(id)` takes it off every list at once and
+ * returns an `undo` function (for the toast's Undo button) that puts the exact same row back.
+ * Returns null when the task isn't loaded. Both steps roll back with a toast if saving fails.
+ */
+export function useDeleteTask() {
+  const queryClient = useQueryClient()
+
+  const remove = useMutation({
+    mutationKey: tasksMutationKey,
+    scope: deleteScope,
+    mutationFn: async (task: Task) => {
+      const { error } = await supabase.from('tasks').delete().eq('id', task.id)
+      if (error) throw error
+    },
+    onMutate: async (task): Promise<Rollback> => {
+      const a = await patchCachedLists<Task>(queryClient, tasksPrefix, (list) => withoutTask(list, task.id))
+      const b = await patchCachedLists<Task>(queryClient, overduePrefix, (list) => withoutTask(list, task.id))
+      return { snapshot: [...a, ...b] }
+    },
+    onError: (_error, _task, context) => {
+      restoreCache(queryClient, context?.snapshot)
+      toast.error("Couldn't delete the task. Try again.")
+    },
+    onSettled: () => invalidateWhenIdle(queryClient, tasksMutationKey, tasksPrefix, overduePrefix),
+  })
+
+  const restore = useMutation({
+    mutationKey: tasksMutationKey,
+    scope: deleteScope,
+    mutationFn: async (task: Task) => {
+      const { error } = await supabase.from('tasks').insert({
+        id: task.id,
+        created_at: task.created_at,
+        title: task.title,
+        notes: task.notes,
+        due_date: task.due_date,
+        time: task.time,
+        tag: task.tag,
+        priority: task.priority,
+        status: task.status,
+        completed_at: task.completed_at,
+        position: task.position,
+        contact_id: task.contact_id,
+      })
+      // 23505 = the row is still there (the delete had failed), so there's nothing to bring back.
+      if (error && error.code !== '23505') throw error
+    },
+    onMutate: async (task): Promise<Rollback> => {
+      const a = await patchCachedLists<Task>(queryClient, tasksPrefix, (list, key) => restoreIntoList(list, key, task))
+      const b = await patchCachedLists<Task>(queryClient, overduePrefix, (list, key) => restoreIntoList(list, key, task))
+      return { snapshot: [...a, ...b] }
+    },
+    onError: (_error, _task, context) => {
+      restoreCache(queryClient, context?.snapshot)
+      toast.error("Couldn't bring the task back. Try again.")
+    },
+    onSettled: () => invalidateWhenIdle(queryClient, tasksMutationKey, tasksPrefix, overduePrefix),
+  })
+
+  return {
+    remove: (id: string): (() => void) | null => {
+      const task = findCachedTask(queryClient, id)
+      if (!task) return null
+      remove.mutate(task)
+      return () => restore.mutate(task)
+    },
+    isPending: remove.isPending || restore.isPending,
+  }
 }
