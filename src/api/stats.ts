@@ -13,19 +13,26 @@ import { supabase } from '@/lib/supabase'
 import { queryKeys } from './keys'
 
 type Fns = Database['public']['Functions']
+type Row<F extends keyof Fns> = Fns[F]['Returns'] extends (infer R)[] ? R : never
+
+/**
+ * The generated types mark every result column as always filled; these columns can be null,
+ * so the UI has to handle that.
+ */
+type WithNull<T, K extends keyof T> = Omit<T, K> & { [P in K]: T[P] | null }
 
 /** One day: tasks + routine done / total, percent null when there was nothing to do. */
-export type DailyCompletionRow = Fns['stats_daily_completion']['Returns'][number]
-/** One funnel step (contacted … won) with % of the step before. */
-export type FunnelStepRow = Fns['stats_outreach_funnel']['Returns'][number]
-/** dimension 'source' | 'channel' | 'template'; key null = no template; label = template name. */
-export type ReplyRateRow = Fns['stats_reply_rates']['Returns'][number]
+export type DailyCompletionRow = WithNull<Row<'stats_daily_completion'>, 'percent'>
+/** One funnel step (contacted … won); pct_of_previous null for the first step or after a 0. */
+export type FunnelStepRow = WithNull<Row<'stats_outreach_funnel'>, 'pct_of_previous'>
+/** dimension 'source' | 'channel' | 'template'; key null = no template; label = template name (null otherwise). */
+export type ReplyRateRow = WithNull<Row<'stats_reply_rates'>, 'key' | 'label'>
 /** Same shape as reply rates, with won deals and € amount. */
-export type RevenueRow = Fns['stats_revenue']['Returns'][number]
+export type RevenueRow = WithNull<Row<'stats_revenue'>, 'key' | 'label'>
 /** tag null = tasks without a tag. */
-export type TagCountRow = Fns['stats_tasks_by_tag']['Returns'][number]
-/** One routine item on one scheduled day (or a day it was ticked anyway). */
-export type RoutineDayRow = Fns['stats_routine_days']['Returns'][number]
+export type TagCountRow = WithNull<Row<'stats_tasks_by_tag'>, 'tag'>
+/** One routine item on one scheduled day (or a day it was ticked anyway); miss_reason null when none given. */
+export type RoutineDayRow = WithNull<Row<'stats_routine_days'>, 'miss_reason'>
 
 /** The API returns at most 1000 rows per call, so long routine ranges are fetched in parts of this many days. */
 export const ROUTINE_DAYS_CHUNK = 31
@@ -50,7 +57,7 @@ export function useDailyCompletion(from: DateKey, to: DateKey) {
   return useQuery({
     queryKey: queryKeys.stats.dailyCompletion(from, to),
     queryFn: async (): Promise<DailyCompletionRow[]> => {
-      const { data, error } = await supabase.rpc('stats_daily_completion', { p_from: from, p_to: to })
+      const { data, error } = await supabase.rpc('stats_daily_completion', { p_from: from ?? undefined, p_to: to ?? undefined })
       if (error) throw error
       return data
     },
@@ -62,7 +69,7 @@ export function useOutreachFunnel(from: DateKey | null, to: DateKey | null) {
   return useQuery({
     queryKey: queryKeys.stats.outreachFunnel(from, to),
     queryFn: async (): Promise<FunnelStepRow[]> => {
-      const { data, error } = await supabase.rpc('stats_outreach_funnel', { p_from: from, p_to: to })
+      const { data, error } = await supabase.rpc('stats_outreach_funnel', { p_from: from ?? undefined, p_to: to ?? undefined })
       if (error) throw error
       return data
     },
@@ -74,7 +81,7 @@ export function useReplyRates(from: DateKey | null, to: DateKey | null) {
   return useQuery({
     queryKey: queryKeys.stats.replyRates(from, to),
     queryFn: async (): Promise<ReplyRateRow[]> => {
-      const { data, error } = await supabase.rpc('stats_reply_rates', { p_from: from, p_to: to })
+      const { data, error } = await supabase.rpc('stats_reply_rates', { p_from: from ?? undefined, p_to: to ?? undefined })
       if (error) throw error
       return data
     },
@@ -86,7 +93,7 @@ export function useRevenue(from: DateKey | null, to: DateKey | null) {
   return useQuery({
     queryKey: queryKeys.stats.revenue(from, to),
     queryFn: async (): Promise<RevenueRow[]> => {
-      const { data, error } = await supabase.rpc('stats_revenue', { p_from: from, p_to: to })
+      const { data, error } = await supabase.rpc('stats_revenue', { p_from: from ?? undefined, p_to: to ?? undefined })
       if (error) throw error
       return data
     },
@@ -98,7 +105,7 @@ export function useTasksByTag(from: DateKey | null, to: DateKey | null) {
   return useQuery({
     queryKey: queryKeys.stats.tasksByTag(from, to),
     queryFn: async (): Promise<TagCountRow[]> => {
-      const { data, error } = await supabase.rpc('stats_tasks_by_tag', { p_from: from, p_to: to })
+      const { data, error } = await supabase.rpc('stats_tasks_by_tag', { p_from: from ?? undefined, p_to: to ?? undefined })
       if (error) throw error
       return data
     },

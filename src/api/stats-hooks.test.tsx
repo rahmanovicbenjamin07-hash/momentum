@@ -152,13 +152,13 @@ describe('metric helpers', () => {
 // ===========================================================================
 
 describe('stats hooks', () => {
-  it('useOutreachFunnel passes the range (null = all time)', async () => {
+  it('useOutreachFunnel passes the range (null = left out, so the SQL default "no limit" applies)', async () => {
     db.respond = () => ({ data: [{ stage: 'contacted', step: 1, contacts: 5, pct_of_previous: null }], error: null })
     const { wrapper } = setup()
     const { result } = renderHook(() => useOutreachFunnel(null, '2026-10-28'), { wrapper })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(db.calls[0]?.table).toBe('rpc:stats_outreach_funnel')
-    expect(argsOf(db.calls[0], 'args')).toEqual([{ p_from: null, p_to: '2026-10-28' }])
+    expect(JSON.stringify(argsOf(db.calls[0], 'args'))).toBe('[{"p_to":"2026-10-28"}]')
     expect(result.current.data).toHaveLength(1)
   })
 

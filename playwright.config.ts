@@ -19,6 +19,13 @@ export default defineConfig({
   webServer: {
     command: `npm run dev -- --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}`,
+    // Tests talk to the fake Supabase in e2e/support/mockSupabase.ts, never the real project.
+    // Shell variables beat .env.local in Vite, so these win over your real URL and key.
+    env: {
+      VITE_SUPABASE_URL: 'http://localhost:54321',
+      VITE_SUPABASE_PUBLISHABLE_KEY: 'e2e-test-key',
+      VITE_ENABLE_GOOGLE_LOGIN: 'false',
+    },
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
   },
