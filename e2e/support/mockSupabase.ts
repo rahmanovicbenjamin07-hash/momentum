@@ -156,6 +156,7 @@ export async function mockSupabase(
       app_metadata: {},
       user_metadata: {},
       created_at: '2026-01-01T00:00:00Z',
+      last_sign_in_at: nowIso(),
     },
   }
   await page.addInitScript({

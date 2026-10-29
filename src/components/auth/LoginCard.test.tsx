@@ -3,58 +3,52 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { LoginCard } from './LoginCard'
 
+const signInFn = () => vi.fn<(email: string, password: string) => Promise<void>>()
+
 describe('LoginCard', () => {
-  it('shows a validation error for a bad email and does not send', async () => {
+  it('shows only email and password, no Google or magic link', () => {
+    render(<LoginCard onSignIn={signInFn()} />)
+    expect(screen.getByLabelText('Email')).toBeInTheDocument()
+    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password')
+    expect(screen.queryByRole('button', { name: /Google|magic link/i })).not.toBeInTheDocument()
+  })
+
+  it('shows validation errors and does not sign in', async () => {
     const user = userEvent.setup()
-    const onSendLink = vi.fn<(email: string) => Promise<void>>().mockResolvedValue()
-    render(<LoginCard onSendLink={onSendLink} />)
+    const onSignIn = signInFn().mockResolvedValue()
+    render(<LoginCard onSignIn={onSignIn} />)
 
     await user.type(screen.getByLabelText('Email'), 'nope')
-    await user.click(screen.getByRole('button', { name: 'Send magic link' }))
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
     expect(await screen.findByText('Enter a valid email address')).toBeInTheDocument()
+    expect(screen.getByText('Enter your password')).toBeInTheDocument()
     expect(screen.getByLabelText('Email')).toHaveAttribute('aria-invalid', 'true')
-    expect(onSendLink).not.toHaveBeenCalled()
+    expect(onSignIn).not.toHaveBeenCalled()
   })
 
-  it('sends the link and shows the "check your email" screen', async () => {
+  it('signs in with the trimmed email and the password', async () => {
     const user = userEvent.setup()
-    const onSendLink = vi.fn<(email: string) => Promise<void>>().mockResolvedValue()
-    render(<LoginCard onSendLink={onSendLink} />)
+    const onSignIn = signInFn().mockResolvedValue()
+    render(<LoginCard onSignIn={onSignIn} />)
 
     await user.type(screen.getByLabelText('Email'), ' me@example.com ')
-    await user.click(screen.getByRole('button', { name: 'Send magic link' }))
+    await user.type(screen.getByLabelText('Password'), 'secret pw')
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    expect(onSendLink).toHaveBeenCalledWith('me@example.com')
-    expect(await screen.findByRole('heading', { name: 'Check your email' })).toBeInTheDocument()
-    expect(screen.getByText('me@example.com')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Use a different email' }))
-    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+    expect(onSignIn).toHaveBeenCalledWith('me@example.com', 'secret pw')
   })
 
-  it('shows the server error under the field', async () => {
+  it('shows the server error and clears the password', async () => {
     const user = userEvent.setup()
-    const onSendLink = vi.fn<(email: string) => Promise<void>>().mockRejectedValue(new Error('Rate limited'))
-    render(<LoginCard onSendLink={onSendLink} />)
+    const onSignIn = signInFn().mockRejectedValue(new Error('Wrong email or password.'))
+    render(<LoginCard onSignIn={onSignIn} />)
 
     await user.type(screen.getByLabelText('Email'), 'me@example.com')
-    await user.click(screen.getByRole('button', { name: 'Send magic link' }))
+    await user.type(screen.getByLabelText('Password'), 'bad')
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    expect(await screen.findByText('Rate limited')).toBeInTheDocument()
-  })
-
-  it('only shows Google when a handler is given', () => {
-    const { unmount } = render(<LoginCard onSendLink={vi.fn<(email: string) => Promise<void>>()} />)
-    expect(screen.queryByRole('button', { name: /Google/ })).not.toBeInTheDocument()
-    unmount()
-
-    render(
-      <LoginCard
-        onSendLink={vi.fn<(email: string) => Promise<void>>()}
-        onGoogle={vi.fn<() => Promise<void>>()}
-      />,
-    )
-    expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Wrong email or password.')
+    expect(screen.getByLabelText('Password')).toHaveValue('')
   })
 })

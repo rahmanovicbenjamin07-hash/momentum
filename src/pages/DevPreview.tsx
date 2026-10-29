@@ -1520,12 +1520,10 @@ export default function DevPreview() {
         <Section title="LoginCard (type an email with 'fail' to see an error)">
           <div className="grid place-items-center rounded-xl border border-dashed border-border py-8">
             <LoginCard
-              onSendLink={async (email) => {
+              onSignIn={async (email) => {
                 await new Promise((resolve) => setTimeout(resolve, 600))
-                if (email.includes('fail')) throw new Error('Too many sign-in emails were sent. Wait a few minutes and try again.')
-              }}
-              onGoogle={async () => {
-                log('google')()
+                if (email.includes('fail')) throw new Error('Wrong email or password.')
+                log('sign in')()
               }}
             />
           </div>

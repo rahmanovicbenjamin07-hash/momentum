@@ -24,7 +24,6 @@ export default defineConfig({
     env: {
       VITE_SUPABASE_URL: 'http://localhost:54321',
       VITE_SUPABASE_PUBLISHABLE_KEY: 'e2e-test-key',
-      VITE_ENABLE_GOOGLE_LOGIN: 'false',
     },
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,

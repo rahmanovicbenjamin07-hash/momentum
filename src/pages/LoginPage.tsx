@@ -4,15 +4,11 @@ import { LoginCard } from '@/components/auth/LoginCard'
 import { FullPageSpinner } from '@/components/FullPageSpinner'
 import { isSupabaseConfigured, supabase } from '@/lib/supabase'
 
-const googleEnabled = import.meta.env.VITE_ENABLE_GOOGLE_LOGIN === 'true'
-
 function friendlyAuthError(message: string): string {
-  if (/rate limit|too many/i.test(message)) {
-    return 'Too many sign-in emails were sent. Wait a few minutes and try again.'
-  }
-  if (/fetch|network/i.test(message)) {
-    return "Can't reach the server. Check your connection and try again."
-  }
+  if (/invalid login credentials/i.test(message)) return 'Wrong email or password.'
+  if (/email not confirmed/i.test(message)) return 'This email is not confirmed yet. Open the confirmation email first.'
+  if (/rate limit|too many/i.test(message)) return 'Too many attempts. Wait a few minutes and try again.'
+  if (/fetch|network/i.test(message)) return "Can't reach the server. Check your connection and try again."
   return message
 }
 
@@ -24,30 +20,15 @@ export default function LoginPage() {
   if (loading) return <FullPageSpinner />
   if (session) return <Navigate to={from} replace />
 
-  async function sendLink(email: string) {
+  async function signIn(email: string, password: string) {
     if (!isSupabaseConfigured) throw new Error('Supabase is not configured yet.')
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: window.location.origin },
-    })
-    if (error) throw new Error(friendlyAuthError(error.message))
-  }
-
-  async function signInWithGoogle() {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin },
-    })
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw new Error(friendlyAuthError(error.message))
   }
 
   return (
     <main className="grid min-h-svh place-items-center bg-background px-4 py-10">
-      <LoginCard
-        onSendLink={sendLink}
-        onGoogle={googleEnabled ? signInWithGoogle : undefined}
-        notConfigured={!isSupabaseConfigured}
-      />
+      <LoginCard onSignIn={signIn} notConfigured={!isSupabaseConfigured} />
     </main>
   )
 }

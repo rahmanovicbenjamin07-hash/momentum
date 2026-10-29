@@ -22,7 +22,8 @@ export const supabase = createClient<Database>(
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: true,
+      // Password sign-in only: never accept a login token from a link in the URL.
+      detectSessionInUrl: false,
     },
   },
 )
