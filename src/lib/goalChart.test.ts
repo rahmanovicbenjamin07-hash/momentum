@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildGoalChart, forecastSentence, neededSentence, type GoalChartInput } from './goalChart'
+import { buildGoalChart, forecastSentence, formatGoalValue, neededSentence, type GoalChartInput } from './goalChart'
 
 const total = {
   type: 'total' as const,
@@ -151,5 +151,47 @@ describe('buildGoalChart', () => {
     expect(chart.forecast).toEqual([])
     expect(chart.finish).toBeNull()
     expect(chart.yMax).toBe(13950)
+  })
+})
+
+describe('hand-updated goals', () => {
+  it('formats Bosnian marks', () => {
+    expect(formatGoalValue(10000, 'bam')).toBe('10,000 KM')
+    expect(formatGoalValue(10000, 'eur')).toBe('€10,000')
+  })
+
+  it('asks for updates instead of logged months', () => {
+    expect(forecastSentence({ ...total, pace: 0, finishDate: null, manual: true })).toBe(
+      "At your current pace you won't reach €18,000 yet — add an update every few weeks.",
+    )
+  })
+
+  const input: GoalChartInput = {
+    months: [],
+    startDate: '2026-05-01',
+    deadline: '2027-05-03',
+    today: '2026-10-28',
+    target: 10000,
+    pace: 500,
+    realPace: 500,
+    pipeline: 0,
+    finishDate: '2027-07-01',
+  }
+
+  it('draws the typed-in points and starts the forecast at the latest value', () => {
+    const points = [
+      { date: '2026-05-01', value: 3000 },
+      { date: '2026-09-01', value: 5000 },
+      { date: '2026-10-28', value: 5000 },
+    ]
+    const chart = buildGoalChart({ ...input, points })
+    expect(chart.actual).toEqual(points)
+    expect(chart.forecast[0]).toEqual({ date: '2026-10-28', value: 5000 })
+  })
+
+  it('a linked goal starts its running total at the starting value', () => {
+    const chart = buildGoalChart({ ...input, months: [{ month: '2026-06', value: 200 }], startValue: 3000 })
+    expect(chart.actual[0]).toEqual({ date: '2026-05-01', value: 3000 })
+    expect(chart.actual.at(-1)).toEqual({ date: '2026-10-28', value: 3200 })
   })
 })

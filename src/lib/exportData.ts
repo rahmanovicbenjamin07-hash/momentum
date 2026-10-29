@@ -3,7 +3,7 @@
  * backup before restoring it, and read metric values from a CSV file.
  */
 import type { ZodType } from 'zod'
-import { goalSchema } from '@/schemas/goals'
+import { goalSchema, goalUpdateSchema } from '@/schemas/goals'
 import { experimentSchema, ideaSchema, lessonSchema, reviewSchema } from '@/schemas/improve'
 import { contactSchema, stageHistorySchema, templateSchema, touchSchema } from '@/schemas/outreach'
 import { notificationPrefSchema } from '@/schemas/settings'
@@ -25,6 +25,7 @@ export const EXPORT_TABLES = [
   'metrics',
   'metric_entries',
   'goals',
+  'goal_updates',
   'reviews',
   'lessons',
   'experiments',
@@ -49,6 +50,7 @@ const ROW_SCHEMAS: Record<ExportTable, ZodType> = {
   metrics: metricSchema,
   metric_entries: metricEntrySchema,
   goals: goalSchema,
+  goal_updates: goalUpdateSchema,
   reviews: reviewSchema,
   lessons: lessonSchema,
   experiments: experimentSchema,

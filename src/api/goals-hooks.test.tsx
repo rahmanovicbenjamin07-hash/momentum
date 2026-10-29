@@ -63,7 +63,9 @@ function goal(fields: Partial<Goal>): Goal {
     type: 'total',
     source_kind: 'metric',
     source_id: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d',
+    unit: null,
     target: 100,
+    start_value: 0,
     start_date: '2026-01-01',
     deadline: '2026-12-31',
     include_pipeline: false,
@@ -115,5 +117,32 @@ describe('useGoalSeries', () => {
     })
     const routineCall = db.calls.find((c) => c.table === 'routine_checks')
     expect(routineCall?.ops).toContainEqual(['eq', ['done', true]])
+  })
+
+  it('a hand-updated goal reads its typed-in values: latest value, chart points, newest first', async () => {
+    db.calls = []
+    db.respond = (call) =>
+      call.table === 'goal_updates'
+        ? {
+            data: [
+              { id: 'u1', user_id: USER_ID, goal_id: 'g-manual', date: '2026-01-10', value: 3500, note: null, created_at: '2026-01-10T10:00:00+00:00' },
+              { id: 'u2', user_id: USER_ID, goal_id: 'g-manual', date: '2026-02-10', value: 4200, note: 'Bonus', created_at: '2026-02-10T10:00:00+00:00' },
+            ],
+            error: null,
+          }
+        : { data: [], error: null }
+    const { wrapper } = setup()
+    const manual = renderHook(
+      () => useGoalSeries(goal({ id: 'g-manual', source_kind: 'manual', source_id: null, unit: 'bam', start_value: 3000 })),
+      { wrapper },
+    )
+    await waitFor(() => expect(manual.result.current.isSuccess).toBe(true))
+    const data = manual.result.current.data
+    expect(data?.current).toBe(4200)
+    expect(data?.manual?.updates.map((u) => u.id)).toEqual(['u2', 'u1'])
+    expect(data?.manual?.points[0]).toEqual({ date: '2026-01-01', value: 3000 })
+    expect(data?.manual?.lastUpdate).toBe('2026-02-10')
+    expect(db.calls.map((c) => c.table)).toEqual(['goal_updates'])
+    expect(db.calls[0]?.ops).toContainEqual(['eq', ['goal_id', 'g-manual']])
   })
 })

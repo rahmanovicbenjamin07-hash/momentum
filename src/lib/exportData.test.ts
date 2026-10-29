@@ -57,7 +57,7 @@ describe('JSON export and validate', () => {
     expect(result.data.tasks).toEqual(sample.tasks)
     expect(result.data.metrics[0]).toMatchObject({ builtin: 'money_earned', position: 0 })
     expect(result.data.metric_entries).toEqual(sample.metric_entries)
-    // Tables not in the file come back empty, all 16 present.
+    // Tables not in the file come back empty, all 17 present.
     expect(Object.keys(result.data)).toEqual([...EXPORT_TABLES])
     expect(result.data.goals).toEqual([])
     expect(result.warnings).toEqual([])

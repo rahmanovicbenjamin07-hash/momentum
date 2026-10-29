@@ -1,4 +1,4 @@
-import type { Unit } from '@/schemas/stats'
+import type { GoalUnit } from '@/schemas/goals'
 import { addDays, daysBetween, formatDate, type DateKey } from './dates'
 import { DAYS_PER_MONTH, type MonthValue } from './forecast'
 
@@ -39,6 +39,10 @@ export type GoalChartInput = {
   pipeline: number
   /** When `pace` reaches the target (from totalForecast), or null. */
   finishDate: DateKey | null
+  /** Where the line starts (e.g. money already saved). Default 0. */
+  startValue?: number
+  /** Hand-entered goals: the line itself (start, updates, today), used instead of `months`. */
+  points?: readonly Point[]
 }
 
 /** "2026-10" → "2026-10-31". */
@@ -63,18 +67,23 @@ const later = (a: DateKey, b: DateKey) => (a > b ? a : b)
 
 /** Lines and markers for a total goal's chart (all pure numbers and dates; the UI draws them). */
 export function buildGoalChart(input: GoalChartInput): GoalChart {
-  const { months, startDate, deadline, today, target, pace, realPace, pipeline, finishDate } = input
-  const values = new Map(months.map((m) => [m.month, m.value]))
+  const { months, startDate, deadline, today, target, pace, realPace, pipeline, finishDate, startValue = 0, points } = input
 
-  // Running total from the start month up to today's month.
-  const actual: Point[] = [{ date: startDate, value: 0 }]
-  let total = 0
-  for (let month = startDate.slice(0, 7); month <= today.slice(0, 7); month = nextMonth(month)) {
-    total += values.get(month) ?? 0
-    const end = monthEnd(month)
-    actual.push({ date: end < today ? end : today, value: total })
+  let actual: Point[]
+  if (points?.length) {
+    actual = [...points]
+  } else {
+    // Running total from the start month up to today's month, on top of the starting value.
+    const values = new Map(months.map((m) => [m.month, m.value]))
+    actual = [{ date: startDate, value: startValue }]
+    let total = startValue
+    for (let month = startDate.slice(0, 7); month <= today.slice(0, 7); month = nextMonth(month)) {
+      total += values.get(month) ?? 0
+      const end = monthEnd(month)
+      actual.push({ date: end < today ? end : today, value: total })
+    }
   }
-  const current = total
+  const current = actual.at(-1)?.value ?? startValue
   const start = current + Math.max(0, pipeline)
   const pipelineJump = pipeline > 0 ? { from: current, to: start } : null
 
@@ -115,11 +124,13 @@ export function buildGoalChart(input: GoalChartInput): GoalChart {
 const whole = new Intl.NumberFormat('en-IE', { maximumFractionDigits: 0 })
 const oneDecimal = new Intl.NumberFormat('en-IE', { maximumFractionDigits: 1 })
 
-/** "€1,943", "150 h", "320 km", "45 days", "117". */
-export function formatGoalValue(value: number, unit: Unit): string {
+/** "€1,943", "10,000 KM", "150 h", "320 km", "45 days", "117". */
+export function formatGoalValue(value: number, unit: GoalUnit): string {
   switch (unit) {
     case 'eur':
       return `€${whole.format(value)}`
+    case 'bam':
+      return `${whole.format(value)} KM`
     case 'hours':
       return `${oneDecimal.format(value)} h`
     case 'km':
@@ -149,7 +160,7 @@ function vsDeadline(early: number, unit: 'day' | 'month'): string {
 export type ForecastSentenceInput =
   | {
       type: 'total'
-      unit: Unit
+      unit: GoalUnit
       target: number
       pace: number
       /** True when the pace comes from the slider. */
@@ -159,10 +170,12 @@ export type ForecastSentenceInput =
       reached: boolean
       /** € expected from open deals, already counted in the forecast. */
       pipeline?: number
+      /** Updated by hand: asks for updates instead of logged months. */
+      manual?: boolean
     }
   | {
       type: 'level'
-      unit: Unit
+      unit: GoalUnit
       target: number
       /** Change per month. */
       growth: number
@@ -191,7 +204,8 @@ export function forecastSentence(input: ForecastSentenceInput): string {
 
   if (input.reached) return `You've reached ${fmt(input.target)}.`
   if (input.pace <= 0 || input.finishDate === null) {
-    return `At your current pace you won't reach ${fmt(input.target)} yet — log a few months first.`
+    const more = input.manual ? 'add an update every few weeks' : 'log a few months first'
+    return `At your current pace you won't reach ${fmt(input.target)} yet — ${more}.`
   }
   const start = input.custom ? `At ${fmt(input.pace)} a month` : `At your current pace (${fmt(input.pace)} a month)`
   const early = daysBetween(input.finishDate, input.deadline)
@@ -205,7 +219,7 @@ export function neededSentence({
   neededPace,
   deadline,
 }: {
-  unit: Unit
+  unit: GoalUnit
   /** From totalForecast; null when the deadline has passed. */
   neededPace: number | null
   deadline: DateKey

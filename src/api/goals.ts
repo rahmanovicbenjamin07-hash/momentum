@@ -1,17 +1,34 @@
 /**
- * Goals page: the user's goals, their progress per month and the open deals
- * that can count towards a money goal.
+ * Goals page: the user's goals, their progress (per month, or the values typed
+ * in for hand-updated goals) and the open deals that can count towards a money goal.
  * Writes are optimistic (the screen changes at once and rolls back with a toast if saving fails).
  */
-import { useMutation, useQueries, useQuery, useQueryClient, type MutateOptions } from '@tanstack/react-query'
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+  type MutateOptions,
+  type QueryClient,
+} from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useAuth } from '@/app/auth-context'
 import { getToday, type DateKey } from '@/lib/dates'
+import type { Point } from '@/lib/goalChart'
+import { manualProgress } from '@/lib/manualGoal'
 import { bestMonth, groupByMonth, runningTotal, type MonthValue } from '@/lib/metrics'
 import { supabase } from '@/lib/supabase'
-import type { Goal, GoalType, NewGoalFormValues } from '@/schemas/goals'
+import type { Goal, GoalType, GoalUpdate, GoalUpdateFormValues, NewGoalFormValues } from '@/schemas/goals'
 import { queryKeys, type ContactFilters } from './keys'
-import { invalidateWhenIdle, newRowBase, patchCachedLists, requireUserId, restoreCache, type CacheSnapshot } from './optimistic'
+import {
+  invalidateWhenIdle,
+  newRowBase,
+  patchCachedLists,
+  patchCachedValue,
+  requireUserId,
+  restoreCache,
+  type CacheSnapshot,
+} from './optimistic'
 
 const goalsKey = queryKeys.goals.goals()
 const goalsMutationKey = ['goals', 'goals'] as const
@@ -21,8 +38,15 @@ type Rollback = { snapshot: CacheSnapshot }
 /** A goal's progress: one value per month (only months with data, oldest first) and where it stands now. */
 export type GoalSeries = {
   months: MonthValue[]
-  /** total goal: everything added up; level goal: the best single month. */
+  /** total goal: start value + everything added up; level goal: the best single month; manual: the latest value. */
   current: number
+  /** Hand-updated goals only: their pace, chart line and the values typed in (newest first). */
+  manual?: {
+    pace: number
+    points: Point[]
+    updates: GoalUpdate[]
+    lastUpdate: DateKey | null
+  }
 }
 
 /** Stages that count as "open" in the pipeline. */
@@ -36,7 +60,20 @@ export type OpenDeal = {
 
 /** Fields that can be changed on an existing goal (the Goals page uses include_pipeline). */
 export type GoalPatch = Partial<
-  Pick<Goal, 'title' | 'short_label' | 'type' | 'source_kind' | 'source_id' | 'target' | 'start_date' | 'deadline' | 'include_pipeline'>
+  Pick<
+    Goal,
+    | 'title'
+    | 'short_label'
+    | 'type'
+    | 'source_kind'
+    | 'source_id'
+    | 'unit'
+    | 'target'
+    | 'start_value'
+    | 'start_date'
+    | 'deadline'
+    | 'include_pipeline'
+  >
 >
 
 // ===========================================================================
@@ -48,10 +85,25 @@ export function routineMonths(doneDates: readonly DateKey[]): MonthValue[] {
   return groupByMonth(doneDates.map((date) => ({ entry_date: date, value: 1, note: null })))
 }
 
-/** Where a goal stands: total = sum of all months, level = best month. 0 with no data. */
-export function goalCurrent(type: GoalType, months: readonly MonthValue[]): number {
+/** Where a goal stands: total = start value + sum of all months, level = best month. */
+export function goalCurrent(type: GoalType, months: readonly MonthValue[], startValue = 0): number {
   if (type === 'level') return bestMonth(months)?.value ?? 0
-  return runningTotal(months).at(-1)?.total ?? 0
+  return startValue + (runningTotal(months).at(-1)?.total ?? 0)
+}
+
+/** A hand-updated goal's series from its typed-in values (any order). */
+export function manualSeries(goal: Goal, updates: readonly GoalUpdate[], today: DateKey): GoalSeries {
+  const progress = manualProgress({ startDate: goal.start_date, startValue: goal.start_value, updates, today })
+  return {
+    months: [],
+    current: progress.current,
+    manual: {
+      pace: progress.pace,
+      points: progress.points,
+      updates: [...updates].sort((a, b) => b.date.localeCompare(a.date)),
+      lastUpdate: progress.lastUpdate,
+    },
+  }
 }
 
 // ===========================================================================
@@ -71,7 +123,7 @@ export function useGoals() {
   })
 }
 
-/** Adds a goal from the "New goal" form. It starts today; `mutateAsync` resolves with the new goal. */
+/** Adds a hand-updated goal from the "New goal" form; `mutateAsync` resolves with the new goal. */
 export function useCreateGoal() {
   const queryClient = useQueryClient()
   const { user } = useAuth()
@@ -85,7 +137,9 @@ export function useCreateGoal() {
         type: row.type,
         source_kind: row.source_kind,
         source_id: row.source_id,
+        unit: row.unit,
         target: row.target,
+        start_value: row.start_value,
         start_date: row.start_date,
         deadline: row.deadline,
         include_pipeline: row.include_pipeline,
@@ -107,11 +161,13 @@ export function useCreateGoal() {
     ...newRowBase(requireUserId(user?.id)),
     title: values.title,
     short_label: values.short_label,
-    type: values.type,
-    source_kind: values.source_kind,
-    source_id: values.source_id,
+    type: 'total',
+    source_kind: 'manual',
+    source_id: null,
+    unit: values.unit,
     target: values.target,
-    start_date: getToday(),
+    start_value: values.start_value,
+    start_date: values.start_date,
     deadline: values.deadline,
     include_pipeline: false,
   })
@@ -148,7 +204,7 @@ export function useUpdateGoal() {
   })
 }
 
-/** Deletes a goal (its metric / routine data stays). */
+/** Deletes a goal and its typed-in updates (metric / routine data stays). */
 export function useDeleteGoal() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -174,11 +230,17 @@ export function useDeleteGoal() {
 
 /**
  * A goal's progress from its start date up to today (Europe/Sarajevo):
- *   metric goal  → the metric's entries added up per month;
+ *   manual goal  → the values typed in (goal_updates);
+ *   metric goal  → the metric's entries added up per month, on top of the start value;
  *   routine goal → days the routine item was ticked done, per month.
  */
 export async function fetchGoalSeries(goal: Goal): Promise<GoalSeries> {
   const today = getToday()
+  if (goal.source_kind === 'manual' || goal.source_id === null) {
+    const { data, error } = await supabase.from('goal_updates').select('*').eq('goal_id', goal.id).order('date')
+    if (error) throw error
+    return manualSeries(goal, data as GoalUpdate[], today)
+  }
   let months: MonthValue[]
   if (goal.source_kind === 'metric') {
     const { data, error } = await supabase
@@ -202,7 +264,90 @@ export async function fetchGoalSeries(goal: Goal): Promise<GoalSeries> {
     if (error) throw error
     months = routineMonths(data.map((row) => row.date))
   }
-  return { months, current: goalCurrent(goal.type, months) }
+  return { months, current: goalCurrent(goal.type, months, goal.start_value) }
+}
+
+// ===========================================================================
+// Values typed in by hand (manual goals)
+// ===========================================================================
+
+const goalUpdatesMutationKey = ['goals', 'updates'] as const
+
+/** Rewrites one goal's cached series with a changed list of updates. */
+async function patchManualSeries(
+  queryClient: QueryClient,
+  goal: Goal,
+  change: (updates: GoalUpdate[]) => GoalUpdate[],
+): Promise<Rollback> {
+  const snapshot = await patchCachedValue<GoalSeries>(queryClient, queryKeys.goals.goalSeries(goal.id), (series) =>
+    series ? manualSeries(goal, change(series.manual?.updates ?? []), getToday()) : undefined,
+  )
+  return { snapshot }
+}
+
+type SaveUpdateInput = { goal: Goal; values: GoalUpdateFormValues }
+
+/**
+ * Saves where a hand-updated goal stands on a day ("today I have €4,200").
+ * One value per day: saving the same day again replaces it.
+ */
+export function useSaveGoalUpdate() {
+  const queryClient = useQueryClient()
+  const { user } = useAuth()
+  const mutation = useMutation({
+    mutationKey: goalUpdatesMutationKey,
+    mutationFn: async ({ row }: { goal: Goal; row: GoalUpdate }) => {
+      const { error } = await supabase
+        .from('goal_updates')
+        .upsert({ id: row.id, goal_id: row.goal_id, date: row.date, value: row.value, note: row.note }, { onConflict: 'goal_id,date' })
+      if (error) throw error
+    },
+    onMutate: ({ goal, row }): Promise<Rollback> =>
+      patchManualSeries(queryClient, goal, (updates) => [...updates.filter((u) => u.date !== row.date), row]),
+    onError: (_error, _input, context) => {
+      restoreCache(queryClient, context?.snapshot)
+      toast.error("Couldn't save the update. Try again.")
+    },
+    onSettled: (_data, _error, { goal }) =>
+      invalidateWhenIdle(queryClient, goalUpdatesMutationKey, queryKeys.goals.goalSeries(goal.id)),
+  })
+
+  const toRow = ({ goal, values }: SaveUpdateInput): { goal: Goal; row: GoalUpdate } => {
+    // Same day again: keep that row's id, so the cache and the database agree.
+    const cached = queryClient.getQueryData<GoalSeries>(queryKeys.goals.goalSeries(goal.id))
+    const sameDay = cached?.manual?.updates.find((u) => u.date === values.date)
+    const base = newRowBase(requireUserId(user?.id))
+    return {
+      goal,
+      row: { ...base, id: sameDay?.id ?? base.id, goal_id: goal.id, date: values.date, value: values.value, note: values.note },
+    }
+  }
+
+  return {
+    ...mutation,
+    mutate: (input: SaveUpdateInput) => mutation.mutate(toRow(input)),
+    mutateAsync: (input: SaveUpdateInput) => mutation.mutateAsync(toRow(input)),
+  }
+}
+
+/** Removes one typed-in value (e.g. a typo). */
+export function useDeleteGoalUpdate() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: goalUpdatesMutationKey,
+    mutationFn: async ({ id }: { goal: Goal; id: string }) => {
+      const { error } = await supabase.from('goal_updates').delete().eq('id', id)
+      if (error) throw error
+    },
+    onMutate: ({ goal, id }): Promise<Rollback> =>
+      patchManualSeries(queryClient, goal, (updates) => updates.filter((u) => u.id !== id)),
+    onError: (_error, _input, context) => {
+      restoreCache(queryClient, context?.snapshot)
+      toast.error("Couldn't delete the update. Try again.")
+    },
+    onSettled: (_data, _error, { goal }) =>
+      invalidateWhenIdle(queryClient, goalUpdatesMutationKey, queryKeys.goals.goalSeries(goal.id)),
+  })
 }
 
 /** One goal's progress (see fetchGoalSeries). */

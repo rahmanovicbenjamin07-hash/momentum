@@ -1,130 +1,73 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Loader2 } from 'lucide-react'
-import { useId, useMemo, type ReactNode } from 'react'
+import { useId, useMemo } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
-import { cn } from 'cn'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { addDays, type DateKey } from '@/lib/dates'
+import { addDays, getToday, type DateKey } from '@/lib/dates'
 import {
-  GOAL_TYPES,
+  GOAL_UNIT_LABELS,
+  GOAL_UNITS,
   newGoalFormSchema,
-  type GoalType,
+  type GoalUnit,
   type NewGoalFormInput,
   type NewGoalFormValues,
-  type SourceKind,
 } from '@/schemas/goals'
-import type { Unit } from '@/schemas/stats'
-
-/** Something a goal can be measured on: one of My metrics, or a routine item. */
-export type GoalSource = { kind: SourceKind; id: string; name: string; unit: Unit }
+import { GoalField, goalSelectClass } from './GoalField'
 
 type NewGoalDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  sources: GoalSource[]
   /** Creates the goal. Throw an Error to show its message. */
   onSubmit: (values: NewGoalFormValues) => Promise<void> | void
-  /** The user's today (for "deadline after today"). Defaults to Sarajevo today. */
+  /** The user's today (start defaults to it; deadline must be after it). Defaults to Sarajevo today. */
   today?: DateKey
 }
 
-const TYPE_LABELS: Record<GoalType, string> = {
-  total: 'Reach a total by a date',
-  level: 'Reach a monthly level',
+const PLACEHOLDER: Record<GoalUnit, { start: string; target: string }> = {
+  eur: { start: 'e.g. 3000', target: 'e.g. 10000' },
+  bam: { start: 'e.g. 5000', target: 'e.g. 20000' },
+  count: { start: 'e.g. 0', target: 'e.g. 200' },
+  hours: { start: 'e.g. 0', target: 'e.g. 300' },
+  km: { start: 'e.g. 0', target: 'e.g. 500' },
+  days: { start: 'e.g. 0', target: 'e.g. 100' },
 }
 
-const UNIT_HINT: Record<Unit, string> = { eur: 'in €', count: 'a count', hours: 'in hours', km: 'in km', days: 'in days' }
-
-const DEFAULTS: NewGoalFormInput = {
-  title: '',
-  short_label: '',
-  type: 'total',
-  source_kind: 'metric',
-  source_id: '',
-  target: '',
-  deadline: '',
-}
-
-const selectClass =
-  'h-10 w-full rounded-lg border border-input bg-card px-3 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-bad'
-
-/** "New goal": name, short label, what it's measured on, type, target and deadline. */
-export function NewGoalDialog({ open, onOpenChange, sources, onSubmit, today }: NewGoalDialogProps) {
+/** "New goal": any number you want to reach by a date. You update it yourself from the goal card. */
+export function NewGoalDialog({ open, onOpenChange, onSubmit, today }: NewGoalDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold">New goal</DialogTitle>
-          <DialogDescription>Pick something you already track and say where you want it to be.</DialogDescription>
+          <DialogDescription>Pick a number, where you start and when you want to reach it. You update it yourself.</DialogDescription>
         </DialogHeader>
         {/* Mounted only while open, so it starts empty every time. */}
-        {open && <NewGoalForm sources={sources} onSubmit={onSubmit} onCancel={() => onOpenChange(false)} today={today} />}
+        {open && <NewGoalForm onSubmit={onSubmit} onCancel={() => onOpenChange(false)} today={today ?? getToday()} />}
       </DialogContent>
     </Dialog>
   )
 }
 
-/** Label + control + optional hint and error, wired up with ids. */
-function Field({
-  id,
-  label,
-  hint,
-  error,
-  children,
-}: {
-  id: string
-  label: string
-  hint?: ReactNode
-  error?: string
-  children: (describedBy: string | undefined) => ReactNode
-}) {
-  const describedBy = [hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(' ') || undefined
-  return (
-    <div className="grid gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      {children(describedBy)}
-      {hint && (
-        <p id={`${id}-hint`} className="text-xs text-ink-2">
-          {hint}
-        </p>
-      )}
-      {error && (
-        <p id={`${id}-error`} className="text-xs text-bad">
-          {error}
-        </p>
-      )}
-    </div>
-  )
-}
-
 function NewGoalForm({
-  sources,
   onSubmit,
   onCancel,
   today,
-}: Pick<NewGoalDialogProps, 'sources' | 'onSubmit' | 'today'> & { onCancel: () => void }) {
+}: Pick<NewGoalDialogProps, 'onSubmit'> & { onCancel: () => void; today: DateKey }) {
   const id = useId()
   const schema = useMemo(() => newGoalFormSchema(today), [today])
   const {
     register,
     handleSubmit,
     control,
-    setValue,
     setError,
-    formState: { errors, isSubmitting, isSubmitted },
+    formState: { errors, isSubmitting },
   } = useForm<NewGoalFormInput, unknown, NewGoalFormValues>({
     resolver: zodResolver(schema),
-    defaultValues: DEFAULTS,
+    defaultValues: { title: '', short_label: '', unit: 'eur', start_value: '', target: '', start_date: today, deadline: '' },
   })
-  const sourceKind = useWatch({ control, name: 'source_kind' })
-  const sourceId = useWatch({ control, name: 'source_id' })
-  const type = useWatch({ control, name: 'type' }) ?? 'total'
-  const source = sources.find((s) => s.kind === sourceKind && s.id === sourceId)
-  const metrics = sources.filter((s) => s.kind === 'metric')
-  const routines = sources.filter((s) => s.kind === 'routine')
+  const unit = useWatch({ control, name: 'unit' }) ?? 'eur'
 
   const save = handleSubmit(async (values) => {
     try {
@@ -134,132 +77,90 @@ function NewGoalForm({
     }
   })
 
-  const unitHint = source ? UNIT_HINT[source.unit] : null
-  const targetHint =
-    type === 'total'
-      ? `The total you want by the deadline${unitHint ? `, ${unitHint}` : ''}.`
-      : `What you want in a single month${unitHint ? `, ${unitHint}` : ''}.`
+  const field = (name: keyof NewGoalFormInput) => ({
+    'aria-invalid': errors[name] ? true : undefined,
+    ...register(name),
+  })
 
   return (
     <form noValidate onSubmit={save} className="flex flex-col gap-4">
-      <Field id={`${id}-title`} label="Name" error={errors.title?.message}>
+      <GoalField id={`${id}-title`} label="Name" error={errors.title?.message}>
         {(describedBy) => (
           <Input
             id={`${id}-title`}
-            placeholder="e.g. Earn €18,000 in 2026"
+            placeholder="e.g. Have €10,000 saved by May"
             autoComplete="off"
-            aria-invalid={errors.title ? true : undefined}
             aria-describedby={describedBy}
-            {...register('title')}
+            {...field('title')}
           />
         )}
-      </Field>
-
-      <Field
-        id={`${id}-short`}
-        label="Short label"
-        hint="Shown on the goal chips at the top."
-        error={errors.short_label?.message}
-      >
-        {(describedBy) => (
-          <Input
-            id={`${id}-short`}
-            placeholder="e.g. €18k in 2026"
-            autoComplete="off"
-            aria-invalid={errors.short_label ? true : undefined}
-            aria-describedby={describedBy}
-            {...register('short_label')}
-          />
-        )}
-      </Field>
-
-      <Field
-        id={`${id}-source`}
-        label="Measured by"
-        hint={sources.length === 0 ? 'Add a metric or a routine item first.' : undefined}
-        error={errors.source_id?.message}
-      >
-        {(describedBy) => (
-          <select
-            id={`${id}-source`}
-            className={selectClass}
-            value={source ? `${source.kind}:${source.id}` : ''}
-            aria-invalid={errors.source_id ? true : undefined}
-            aria-describedby={describedBy}
-            onChange={(e) => {
-              const [kind, ...rest] = e.target.value.split(':')
-              setValue('source_kind', (kind as SourceKind) || 'metric')
-              setValue('source_id', rest.join(':'), { shouldValidate: isSubmitted })
-            }}
-          >
-            <option value="">Choose…</option>
-            {metrics.length > 0 && (
-              <optgroup label="My metrics">
-                {metrics.map((s) => (
-                  <option key={s.id} value={`metric:${s.id}`}>
-                    {s.name}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {routines.length > 0 && (
-              <optgroup label="Routine items">
-                {routines.map((s) => (
-                  <option key={s.id} value={`routine:${s.id}`}>
-                    {s.name}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
-        )}
-      </Field>
-
-      <fieldset className="grid gap-1.5">
-        <legend className="mb-1.5 text-sm font-medium text-foreground">Type</legend>
-        <div className="flex w-fit flex-wrap rounded-lg border border-border bg-muted p-1">
-          {GOAL_TYPES.map((value) => (
-            <label
-              key={value}
-              className={cn(
-                'flex h-8 cursor-pointer items-center rounded-md px-3 text-sm font-medium has-focus-visible:ring-3 has-focus-visible:ring-ring/50',
-                type === value ? 'bg-card text-foreground' : 'text-ink-2 hover:text-foreground',
-              )}
-            >
-              <input type="radio" value={value} className="sr-only" {...register('type')} />
-              {TYPE_LABELS[value]}
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      </GoalField>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id={`${id}-target`} label="Target" hint={targetHint} error={errors.target?.message}>
+        <GoalField
+          id={`${id}-short`}
+          label="Short label (optional)"
+          hint="Shown on the goal chips."
+          error={errors.short_label?.message}
+        >
+          {(describedBy) => (
+            <Input id={`${id}-short`} placeholder="e.g. €10k saved" autoComplete="off" aria-describedby={describedBy} {...field('short_label')} />
+          )}
+        </GoalField>
+
+        <GoalField id={`${id}-unit`} label="Unit" error={errors.unit?.message}>
+          {(describedBy) => (
+            <select id={`${id}-unit`} className={goalSelectClass} aria-describedby={describedBy} {...field('unit')}>
+              {GOAL_UNITS.map((value) => (
+                <option key={value} value={value}>
+                  {GOAL_UNIT_LABELS[value]}
+                </option>
+              ))}
+            </select>
+          )}
+        </GoalField>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <GoalField id={`${id}-start`} label="Starting point" hint="Where you are now. Empty = 0." error={errors.start_value?.message}>
+          {(describedBy) => (
+            <Input
+              id={`${id}-start`}
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder={PLACEHOLDER[unit].start}
+              aria-describedby={describedBy}
+              {...field('start_value')}
+            />
+          )}
+        </GoalField>
+
+        <GoalField id={`${id}-target`} label="Target" hint="The number you want to reach." error={errors.target?.message}>
           {(describedBy) => (
             <Input
               id={`${id}-target`}
               inputMode="decimal"
               autoComplete="off"
-              placeholder={source?.unit === 'eur' ? 'e.g. 18000' : 'e.g. 150'}
-              aria-invalid={errors.target ? true : undefined}
+              placeholder={PLACEHOLDER[unit].target}
               aria-describedby={describedBy}
-              {...register('target')}
+              {...field('target')}
             />
           )}
-        </Field>
+        </GoalField>
+      </div>
 
-        <Field id={`${id}-deadline`} label="Deadline" error={errors.deadline?.message}>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <GoalField id={`${id}-from`} label="Start date" error={errors.start_date?.message}>
           {(describedBy) => (
-            <Input
-              id={`${id}-deadline`}
-              type="date"
-              min={today ? addDays(today, 1) : undefined}
-              aria-invalid={errors.deadline ? true : undefined}
-              aria-describedby={describedBy}
-              {...register('deadline')}
-            />
+            <Input id={`${id}-from`} type="date" max={today} aria-describedby={describedBy} {...field('start_date')} />
           )}
-        </Field>
+        </GoalField>
+
+        <GoalField id={`${id}-deadline`} label="Deadline" error={errors.deadline?.message}>
+          {(describedBy) => (
+            <Input id={`${id}-deadline`} type="date" min={addDays(today, 1)} aria-describedby={describedBy} {...field('deadline')} />
+          )}
+        </GoalField>
       </div>
 
       {errors.root?.message && (

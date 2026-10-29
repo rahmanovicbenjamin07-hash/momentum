@@ -4,7 +4,6 @@
  */
 import type { GoalSeries, OpenDeal } from '@/api/goals'
 import type { MetricRow } from '@/api/metrics'
-import type { GoalSource } from '@/components/goals/NewGoalDialog'
 import type { PipelineDeal } from '@/components/goals/meta'
 import type { GoalStatusRow } from '@/components/reports/GoalStatuses'
 import { addDays, daysBetween, formatDate, type DateKey } from '@/lib/dates'
@@ -17,25 +16,17 @@ import {
   type GoalStatus,
 } from '@/lib/forecast'
 import { buildGoalChart, forecastSentence, formatGoalValue, neededSentence, type GoalChart } from '@/lib/goalChart'
-import type { Goal } from '@/schemas/goals'
-import type { Unit } from '@/schemas/stats'
+import type { Goal, GoalUnit } from '@/schemas/goals'
 import type { RoutineItem } from '@/schemas/today'
 
-/** What a goal is measured on, with its name and unit (routine goals count days). */
-export function goalSource(goal: Goal, metrics: readonly MetricRow[], routine: readonly RoutineItem[]): { name: string; unit: Unit } {
+/** What a goal is measured on, with its name and unit (routine goals count days, manual goals have their own unit). */
+export function goalSource(goal: Goal, metrics: readonly MetricRow[], routine: readonly RoutineItem[]): { name: string; unit: GoalUnit } {
+  if (goal.source_kind === 'manual') return { name: 'Updated by hand', unit: goal.unit ?? 'count' }
   if (goal.source_kind === 'metric') {
     const metric = metrics.find((m) => m.id === goal.source_id)
     return { name: metric?.name ?? 'Deleted metric', unit: metric?.unit ?? 'count' }
   }
   return { name: routine.find((r) => r.id === goal.source_id)?.title ?? 'Removed routine item', unit: 'days' }
-}
-
-/** Choices for "New goal": every metric, then every routine item. */
-export function goalSources(metrics: readonly MetricRow[], routine: readonly RoutineItem[]): GoalSource[] {
-  return [
-    ...metrics.map((m) => ({ kind: 'metric' as const, id: m.id, name: m.name, unit: m.unit })),
-    ...routine.map((r) => ({ kind: 'routine' as const, id: r.id, name: r.title, unit: 'days' as const })),
-  ]
 }
 
 /** Open deals weighted by stage, for the pipeline box. */
@@ -47,10 +38,11 @@ export function pipelineDeals(deals: readonly OpenDeal[]): { total: number; deal
   }
 }
 
-/** "€20k", "1.5k h", "200 days" for the y axis. */
-export function formatTick(value: number, unit: Unit): string {
+/** "€20k", "20k KM", "1.5k h", "200 days" for the y axis. */
+export function formatTick(value: number, unit: GoalUnit): string {
   const short = value >= 1000 ? `${Number((value / 1000).toFixed(1))}k` : String(Math.round(value))
   if (unit === 'eur') return `€${short}`
+  if (unit === 'bam') return `${short} KM`
   if (unit === 'hours') return `${short} h`
   if (unit === 'km') return `${short} km`
   return short
@@ -73,16 +65,16 @@ export type GoalView = {
   forecast: string
   /** Only for total goals. */
   needed: string | null
-  /** "€13,950 + €1,910 expected of €18,000". */
+  /** "€13,950 + €1,910 expected of €18,000", "€4,200 of €10,000 · started at €3,000". */
   progress: string
-  /** "MY METRIC · Money earned · deadline 1 Jan 2027". */
+  /** "MY METRIC · Money earned · deadline 1 Jan 2027", "UPDATED BY HAND · last update 12 Oct 2026 · deadline …". */
   sourceLine: string
 }
 
 export type GoalViewInput = {
   goal: Goal
   series: GoalSeries
-  source: { name: string; unit: Unit }
+  source: { name: string; unit: GoalUnit }
   today: DateKey
   /** € expected from open deals; counted only for money goals with include_pipeline on. */
   pipeline: number
@@ -90,16 +82,25 @@ export type GoalViewInput = {
   pace?: number
 }
 
-/** Whether open deals can count towards this goal (total goals in €). */
-export function canUsePipeline(goal: Goal, unit: Unit): boolean {
-  return goal.type === 'total' && unit === 'eur'
+/** Whether open deals can count towards this goal (total goals in € measured on a metric). */
+export function canUsePipeline(goal: Goal, unit: GoalUnit): boolean {
+  return goal.type === 'total' && unit === 'eur' && goal.source_kind !== 'manual'
+}
+
+function goalSourceLine(goal: Goal, series: GoalSeries, sourceName: string): string {
+  const deadline = `deadline ${formatDate(goal.deadline)}`
+  if (goal.source_kind === 'manual') {
+    const last = series.manual?.lastUpdate
+    return `UPDATED BY HAND · ${last ? `last update ${formatDate(last)}` : 'no updates yet'} · ${deadline}`
+  }
+  return `${goal.source_kind === 'metric' ? 'MY METRIC' : 'MY ROUTINE'} · ${sourceName} · ${deadline}`
 }
 
 /** Everything one goal card shows. The status always uses the real pace, not the slider. */
 export function goalView({ goal, series, source, today, pipeline, pace }: GoalViewInput): GoalView {
   const { unit } = source
   const fmt = (v: number) => formatGoalValue(v, unit)
-  const sourceLine = `${goal.source_kind === 'metric' ? 'MY METRIC' : 'MY ROUTINE'} · ${source.name} · deadline ${formatDate(goal.deadline)}`
+  const sourceLine = goalSourceLine(goal, series, source.name)
 
   if (goal.type === 'level') {
     const level = levelForecast({ months: series.months, target: goal.target, today })
@@ -143,9 +144,10 @@ export function goalView({ goal, series, source, today, pipeline, pace }: GoalVi
   }
 
   const usedPipeline = canUsePipeline(goal, unit) && goal.include_pipeline ? pipeline : 0
-  const realPace = recentPace(series.months, today)
+  // Hand-updated goals: pace from the typed-in values; others: the last 3 complete months.
+  const realPace = series.manual ? series.manual.pace : recentPace(series.months, today)
   const common = { months: series.months, current: series.current, target: goal.target, today, deadline: goal.deadline, pipeline: usedPipeline }
-  const real = totalForecast(common)
+  const real = totalForecast({ ...common, paceOverride: realPace })
   const shown = pace === undefined || pace === realPace ? real : totalForecast({ ...common, paceOverride: pace })
 
   return {
@@ -162,6 +164,8 @@ export function goalView({ goal, series, source, today, pipeline, pace }: GoalVi
       realPace,
       pipeline: usedPipeline,
       finishDate: shown.finishDate,
+      startValue: goal.start_value,
+      points: series.manual?.points,
     }),
     forecast: forecastSentence({
       type: 'total',
@@ -173,12 +177,14 @@ export function goalView({ goal, series, source, today, pipeline, pace }: GoalVi
       deadline: goal.deadline,
       reached: shown.reached,
       pipeline: usedPipeline,
+      manual: Boolean(series.manual),
     }),
     needed: shown.reached ? null : neededSentence({ unit, neededPace: real.neededPace, deadline: goal.deadline }),
     progress:
-      usedPipeline > 0
+      (usedPipeline > 0
         ? `${fmt(series.current)} + ${formatGoalValue(usedPipeline, 'eur')} expected of ${fmt(goal.target)}`
-        : `${fmt(series.current)} of ${fmt(goal.target)}`,
+        : `${fmt(series.current)} of ${fmt(goal.target)}`) +
+      (goal.start_value > 0 ? ` · started at ${fmt(goal.start_value)}` : ''),
     sourceLine,
   }
 }
@@ -203,7 +209,7 @@ const REPORT_STATUS: Record<GoalStatus, Pick<GoalStatusRow, 'status' | 'label'>>
 export function reportGoalRows(
   goals: readonly Goal[],
   series: ReadonlyMap<string, GoalSeries>,
-  sourceOf: (goal: Goal) => { name: string; unit: Unit },
+  sourceOf: (goal: Goal) => { name: string; unit: GoalUnit },
   today: DateKey,
   pipeline: number,
 ): GoalStatusRow[] {

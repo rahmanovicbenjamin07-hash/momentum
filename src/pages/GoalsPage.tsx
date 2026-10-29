@@ -1,25 +1,39 @@
-import { Plus } from 'lucide-react'
+import { PencilLine, Plus, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { useCreateGoal, useGoals, useGoalsSeries, useOpenDeals, useUpdateGoal, type GoalSeries } from '@/api/goals'
+import {
+  useCreateGoal,
+  useDeleteGoal,
+  useDeleteGoalUpdate,
+  useGoals,
+  useGoalsSeries,
+  useOpenDeals,
+  useSaveGoalUpdate,
+  useUpdateGoal,
+  type GoalSeries,
+} from '@/api/goals'
 import { useMetrics } from '@/api/metrics'
 import { useRoutineItems } from '@/api/routine'
-import { canUsePipeline, formatTick, goalSource, goalSources, goalView, pipelineDeals, sliderRange } from '@/app/goalsView'
+import { canUsePipeline, formatTick, goalSource, goalView, pipelineDeals, sliderRange } from '@/app/goalsView'
 import { useUserToday } from '@/app/useUserToday'
 import { EmptyState } from '@/components/EmptyState'
 import { PageHeader } from '@/components/PageHeader'
+import { DeleteGoalDialog } from '@/components/goals/DeleteGoalDialog'
 import { GoalChart } from '@/components/goals/GoalChart'
 import { GoalChips } from '@/components/goals/GoalChips'
 import { GoalHeader } from '@/components/goals/GoalHeader'
+import { GoalUpdateDialog } from '@/components/goals/GoalUpdateDialog'
+import { GoalUpdatesList } from '@/components/goals/GoalUpdatesList'
 import { NewGoalDialog } from '@/components/goals/NewGoalDialog'
 import { PaceSlider } from '@/components/goals/PaceSlider'
 import { PipelineToggle } from '@/components/goals/PipelineToggle'
 import { Button } from '@/components/ui/button'
 import { formatGoalValue } from '@/lib/goalChart'
-import type { Goal } from '@/schemas/goals'
-import type { Unit } from '@/schemas/stats'
+import type { Goal, GoalUnit, GoalUpdate, GoalUpdateFormValues } from '@/schemas/goals'
 import { useParam } from './stats/params'
 import { LoadError, Loading } from './stats/shared'
+
+const EMPTY_SERIES: GoalSeries = { months: [], current: 0 }
 
 /** Goals (design/goals.png): pick a goal, see where the current pace takes you, and try a faster one. */
 export default function GoalsPage() {
@@ -34,6 +48,9 @@ export default function GoalsPage() {
   const openDeals = useOpenDeals()
   const createGoal = useCreateGoal()
   const updateGoal = useUpdateGoal()
+  const deleteGoal = useDeleteGoal()
+  const saveUpdate = useSaveGoalUpdate()
+  const deleteUpdate = useDeleteGoalUpdate()
 
   const ready = goals.data && series.data && metrics.data && routine.data && openDeals.data
   const failed = goals.isError || series.isError || metrics.isError || routine.isError || openDeals.isError
@@ -49,7 +66,7 @@ export default function GoalsPage() {
       label: goal.short_label,
       status: goalView({
         goal,
-        series: all.get(goal.id) ?? { months: [], current: 0 },
+        series: all.get(goal.id) ?? EMPTY_SERIES,
         source: goalSource(goal, metrics.data ?? [], routine.data ?? []),
         today,
         pipeline: pipeline.total,
@@ -86,7 +103,7 @@ export default function GoalsPage() {
       ) : !selected ? (
         <EmptyState
           title="No goals yet"
-          description="Set a target for one of your metrics or routine items, and see where your current pace takes you."
+          description="Pick any number you want to reach by a date, like money saved, and update it whenever it changes."
         >
           <Button onClick={() => setNewOpen(true)}>
             <Plus aria-hidden="true" />
@@ -100,11 +117,22 @@ export default function GoalsPage() {
           <GoalCard
             key={selected.id}
             goal={selected}
-            series={series.data?.get(selected.id) ?? { months: [], current: 0 }}
+            series={series.data?.get(selected.id) ?? EMPTY_SERIES}
             source={sourceOf(selected)}
             today={today}
             pipeline={pipeline}
             onPipelineChange={(checked) => updateGoal.mutate({ id: selected.id, patch: { include_pipeline: checked } })}
+            onSaveUpdate={async (values) => {
+              await saveUpdate.mutateAsync({ goal: selected, values })
+              toast.success('Update saved')
+            }}
+            onDeleteUpdate={(update) => deleteUpdate.mutate({ goal: selected, id: update.id })}
+            onDelete={() => {
+              const next = goals.data?.find((g) => g.id !== selected.id)
+              deleteGoal.mutate(selected.id)
+              setGoal(next?.id ?? null)
+              toast.success(`Deleted ${selected.title}`)
+            }}
           />
         </div>
       )}
@@ -112,7 +140,6 @@ export default function GoalsPage() {
       <NewGoalDialog
         open={newOpen}
         onOpenChange={setNewOpen}
-        sources={goalSources(metrics.data ?? [], routine.data ?? [])}
         today={today}
         onSubmit={async (values) => {
           try {
@@ -132,30 +159,60 @@ export default function GoalsPage() {
 type GoalCardProps = {
   goal: Goal
   series: GoalSeries
-  source: { name: string; unit: Unit }
+  source: { name: string; unit: GoalUnit }
   today: string
   pipeline: ReturnType<typeof pipelineDeals>
   onPipelineChange: (checked: boolean) => void
+  onSaveUpdate: (values: GoalUpdateFormValues) => Promise<void>
+  onDeleteUpdate: (update: GoalUpdate) => void
+  onDelete: () => void
 }
 
-/** One goal: header, pipeline box (money goals), sentences, chart and pace slider. */
-function GoalCard({ goal, series, source, today, pipeline, onPipelineChange }: GoalCardProps) {
+/** One goal: header, actions, pipeline box (money goals), sentences, chart, pace slider and updates. */
+function GoalCard({
+  goal,
+  series,
+  source,
+  today,
+  pipeline,
+  onPipelineChange,
+  onSaveUpdate,
+  onDeleteUpdate,
+  onDelete,
+}: GoalCardProps) {
   const { unit } = source
+  const [updateOpen, setUpdateOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const real = useMemo(
     () => goalView({ goal, series, source, today, pipeline: pipeline.total }),
     [goal, series, source, today, pipeline.total],
   )
-  const [pace, setPace] = useState(real.realPace)
+  // null = follow the real pace (which changes when you save an update).
+  const [customPace, setCustomPace] = useState<number | null>(null)
+  const pace = customPace ?? real.realPace
   const view = useMemo(
     () => (goal.type === 'total' ? goalView({ goal, series, source, today, pipeline: pipeline.total, pace }) : real),
     [goal, series, source, today, pipeline.total, pace, real],
   )
   const range = sliderRange(real.realPace, real.neededPace)
   const fmt = (v: number) => formatGoalValue(v, unit)
+  const manual = goal.source_kind === 'manual'
 
   return (
     <section aria-label={goal.title} className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5 md:p-6">
       <GoalHeader sourceLine={view.sourceLine} title={goal.title} progressText={view.progress} status={view.status} />
+      <div className="flex flex-wrap gap-2">
+        {manual && (
+          <Button onClick={() => setUpdateOpen(true)}>
+            <PencilLine aria-hidden="true" />
+            Update
+          </Button>
+        )}
+        <Button variant="outline" onClick={() => setDeleteOpen(true)}>
+          <Trash2 aria-hidden="true" />
+          Delete goal
+        </Button>
+      </div>
       {canUsePipeline(goal, unit) && (
         <PipelineToggle checked={goal.include_pipeline} onChange={onPipelineChange} total={pipeline.total} deals={pipeline.deals} />
       )}
@@ -174,10 +231,35 @@ function GoalCard({ goal, series, source, today, pipeline, onPipelineChange }: G
           step={range.step}
           neededPace={real.neededPace}
           formatValue={fmt}
-          onChange={setPace}
-          onReset={() => setPace(real.realPace)}
+          onChange={setCustomPace}
+          onReset={() => setCustomPace(null)}
         />
       )}
+      {manual && <GoalUpdatesList updates={series.manual?.updates ?? []} unit={unit} onDelete={onDeleteUpdate} />}
+
+      <GoalUpdateDialog
+        open={updateOpen}
+        onOpenChange={setUpdateOpen}
+        goalTitle={goal.title}
+        unit={unit}
+        current={series.current}
+        startDate={goal.start_date}
+        today={today}
+        onSubmit={async (values) => {
+          await onSaveUpdate(values)
+          setUpdateOpen(false)
+        }}
+      />
+      <DeleteGoalDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        goalTitle={goal.title}
+        hasUpdates={manual && (series.manual?.updates.length ?? 0) > 0}
+        onConfirm={() => {
+          setDeleteOpen(false)
+          onDelete()
+        }}
+      />
     </section>
   )
 }

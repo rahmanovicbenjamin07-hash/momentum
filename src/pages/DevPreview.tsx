@@ -121,6 +121,9 @@ import { GoalHeader } from '@/components/goals/GoalHeader'
 import { PipelineToggle } from '@/components/goals/PipelineToggle'
 import { GoalChart } from '@/components/goals/GoalChart'
 import { NewGoalDialog } from '@/components/goals/NewGoalDialog'
+import { GoalUpdateDialog } from '@/components/goals/GoalUpdateDialog'
+import { GoalUpdatesList } from '@/components/goals/GoalUpdatesList'
+import { DeleteGoalDialog } from '@/components/goals/DeleteGoalDialog'
 import { PaceSlider } from '@/components/goals/PaceSlider'
 import { buildGoalChart, forecastSentence, formatGoalValue, neededSentence } from '@/lib/goalChart'
 import { DAYS_PER_MONTH } from '@/lib/forecast'
@@ -128,7 +131,7 @@ import { daysBetween } from '@/lib/dates'
 import {
   MOCK_GOALS_TODAY,
   mockGoalChips,
-  mockGoalSources,
+  mockGoalUpdates,
   mockMoneyGoalChart,
   mockMoneyGoalHeader,
   mockMoneyGoalMonths,
@@ -824,13 +827,62 @@ function GoalChartDemo() {
       <NewGoalDialog
         open={newOpen}
         onOpenChange={setNewOpen}
-        sources={mockGoalSources}
         today={today}
         onSubmit={async (values) => {
           await new Promise((resolve) => setTimeout(resolve, 300))
           if (values.title.includes('fail')) throw new Error("Couldn't save. Check your connection and try again.")
           log('goal created')(values)
           setNewOpen(false)
+        }}
+      />
+    </div>
+  )
+}
+
+/** A hand-updated goal's Update / Delete buttons and its list of updates, with local state. */
+function GoalUpdatesDemo() {
+  const [updates, setUpdates] = useState(mockGoalUpdates)
+  const [updateOpen, setUpdateOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const current = updates[0]?.value ?? 3000
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-dashed border-border p-4">
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => setUpdateOpen(true)}>Update</Button>
+        <Button variant="outline" onClick={() => setDeleteOpen(true)}>
+          Delete goal
+        </Button>
+      </div>
+      <GoalUpdatesList updates={updates} unit="bam" onDelete={(u) => setUpdates((prev) => prev.filter((x) => x.id !== u.id))} />
+      <GoalUpdatesList updates={[]} unit="eur" onDelete={log('delete update')} />
+      <GoalUpdateDialog
+        open={updateOpen}
+        onOpenChange={setUpdateOpen}
+        goalTitle="Have 10,000 KM saved by May"
+        unit="bam"
+        current={current}
+        startDate="2026-05-01"
+        today={MOCK_GOALS_TODAY}
+        onSubmit={async (values) => {
+          await new Promise((resolve) => setTimeout(resolve, 300))
+          if (values.value === 13) throw new Error("Couldn't save the update. Try again.")
+          setUpdates((prev) =>
+            [
+              { id: crypto.randomUUID(), user_id: 'u', goal_id: 'g-saved', created_at: new Date().toISOString(), ...values },
+              ...prev.filter((u) => u.date !== values.date),
+            ].sort((a, b) => b.date.localeCompare(a.date)),
+          )
+          setUpdateOpen(false)
+        }}
+      />
+      <DeleteGoalDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        goalTitle="Have 10,000 KM saved by May"
+        hasUpdates={updates.length > 0}
+        onConfirm={() => {
+          log('delete goal')()
+          setDeleteOpen(false)
         }}
       />
     </div>
@@ -1450,6 +1502,10 @@ export default function DevPreview() {
 
         <Section title="Goals: chart, pace slider, New goal dialog (drag the slider — ghost line shows your real pace; untick deals; 'fail' in the goal name shows an error)">
           <GoalChartDemo />
+        </Section>
+
+        <Section title="Goals: updated by hand (Update saves a value, the bin deletes one, 'Delete goal' asks first; a value of 13 shows an error)">
+          <GoalUpdatesDemo />
         </Section>
 
         <Section title="Improvements (switch tabs or Tab + ← → Home End; edit and save the review; add/delete lessons, experiments, ideas; 'fail' in a new item shows an error)">

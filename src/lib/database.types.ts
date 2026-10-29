@@ -188,6 +188,44 @@ export type Database = {
         }
         Relationships: []
       }
+      goal_updates: {
+        Row: {
+          created_at: string
+          date: string
+          goal_id: string
+          id: string
+          note: string | null
+          user_id: string
+          value: number
+        }
+        Insert: {
+          created_at?: string
+          date?: string
+          goal_id: string
+          id?: string
+          note?: string | null
+          user_id?: string
+          value: number
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          goal_id?: string
+          id?: string
+          note?: string | null
+          user_id?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "goal_updates_goal_fk"
+            columns: ["goal_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "goals"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
       goals: {
         Row: {
           created_at: string
@@ -195,12 +233,14 @@ export type Database = {
           id: string
           include_pipeline: boolean
           short_label: string
-          source_id: string
+          source_id: string | null
           source_kind: string
           start_date: string
+          start_value: number
           target: number
           title: string
           type: string
+          unit: string | null
           user_id: string
         }
         Insert: {
@@ -209,12 +249,14 @@ export type Database = {
           id?: string
           include_pipeline?: boolean
           short_label: string
-          source_id: string
+          source_id?: string | null
           source_kind?: string
           start_date?: string
+          start_value?: number
           target: number
           title: string
           type?: string
+          unit?: string | null
           user_id?: string
         }
         Update: {
@@ -223,12 +265,14 @@ export type Database = {
           id?: string
           include_pipeline?: boolean
           short_label?: string
-          source_id?: string
+          source_id?: string | null
           source_kind?: string
           start_date?: string
+          start_value?: number
           target?: number
           title?: string
           type?: string
+          unit?: string | null
           user_id?: string
         }
         Relationships: []

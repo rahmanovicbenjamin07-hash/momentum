@@ -1,8 +1,8 @@
-import type { GoalSource } from '@/components/goals/NewGoalDialog'
 import type { DateKey } from '@/lib/dates'
 import type { MonthValue } from '@/lib/forecast'
 import type { GoalChip } from '@/components/goals/GoalChips'
 import type { GoalStatus, PipelineDeal } from '@/components/goals/meta'
+import type { GoalUpdate } from '@/schemas/goals'
 
 /** The five goals from design/goals.png. Statuses are picked to show every dot colour. */
 export const mockGoalChips: GoalChip[] = [
@@ -69,11 +69,9 @@ export const mockMoneyGoalChart = {
   pace: { min: 0, max: 4000, step: 50 },
 }
 
-/** What a new goal can be measured on. Ids are valid UUIDs so the form accepts them. */
-export const mockGoalSources: GoalSource[] = [
-  { kind: 'metric', id: '00000000-0000-4000-8000-000000000001', name: 'Money earned', unit: 'eur' },
-  { kind: 'metric', id: '00000000-0000-4000-8000-000000000002', name: 'Trainings', unit: 'count' },
-  { kind: 'metric', id: '00000000-0000-4000-8000-000000000003', name: 'Hours worked', unit: 'hours' },
-  { kind: 'routine', id: '00000000-0000-4000-8000-000000000004', name: 'Wake up at 06:00', unit: 'days' },
-  { kind: 'routine', id: '00000000-0000-4000-8000-000000000005', name: 'Read 20 minutes', unit: 'days' },
+/** Values typed in for a hand-updated goal ("Have €10,000 saved"), newest first. */
+export const mockGoalUpdates: GoalUpdate[] = [
+  { id: 'u-3', user_id: 'u', goal_id: 'g-saved', date: '2026-10-01', value: 5200, note: 'Salary + Nova Dental', created_at: '2026-10-01T18:00:00+00:00' },
+  { id: 'u-2', user_id: 'u', goal_id: 'g-saved', date: '2026-08-01', value: 4300, note: null, created_at: '2026-08-01T18:00:00+00:00' },
+  { id: 'u-1', user_id: 'u', goal_id: 'g-saved', date: '2026-06-01', value: 3600, note: 'First month', created_at: '2026-06-01T18:00:00+00:00' },
 ]

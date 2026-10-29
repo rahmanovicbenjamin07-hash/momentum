@@ -17,6 +17,7 @@ export const EXPORT_TABLES = [
   'metrics',
   'metric_entries',
   'goals',
+  'goal_updates',
   'reviews',
   'lessons',
   'experiments',
