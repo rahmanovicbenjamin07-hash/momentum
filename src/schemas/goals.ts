@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { getToday, type DateKey } from '@/lib/dates'
+import { getToday, isDateKey, type DateKey } from '@/lib/dates'
 import { dateKeySchema } from './today'
 
 // ---------------------------------------------------------------------------
@@ -15,6 +15,14 @@ export const GOAL_LIMITS = {
   note: 200,
   /** Largest target or value (fits € amounts, hours, days…). */
   target: 100_000_000,
+  /** "Why it matters" on an objective. */
+  why: 300,
+  /** Key results per objective. */
+  keyResults: 5,
+  milestoneTitle: 120,
+  /** Steps per milestones key result. */
+  milestones: 20,
+  checkinNote: 300,
 } as const
 
 const tooLong = (max: number) => `Keep it under ${max} characters`
@@ -64,6 +72,24 @@ export const GOAL_UNIT_LABELS: Record<GoalUnit, string> = {
   days: 'Days',
 }
 
+/**
+ * How a key result is measured:
+ * number = from a starting point to a target; milestones = a list of steps;
+ * habit = N times a week; done = done or not done.
+ */
+export const GOAL_KINDS = ['number', 'milestones', 'habit', 'done'] as const
+export const goalKindSchema = z.enum(GOAL_KINDS)
+export type GoalKind = z.infer<typeof goalKindSchema>
+export const GOAL_KIND_LABELS: Record<GoalKind, { label: string; hint: string }> = {
+  number: { label: 'Number', hint: 'e.g. €10K saved' },
+  milestones: { label: 'Steps', hint: 'e.g. Launch the website' },
+  habit: { label: 'Habit', hint: 'e.g. 3 times a week' },
+  done: { label: 'Done / not done', hint: 'e.g. Get the driving licence' },
+}
+
+/** Habit key results: routine-linked (ticks on Today) or ticked by hand on the goal. */
+export const HABIT_MANUAL = 'manual'
+
 // ---------------------------------------------------------------------------
 // Rows
 // ---------------------------------------------------------------------------
@@ -79,11 +105,37 @@ const shortLabelSchema = z
   .min(1, 'Add a short label')
   .max(GOAL_LIMITS.shortLabel, tooLong(GOAL_LIMITS.shortLabel))
 const noteSchema = z.string().trim().max(GOAL_LIMITS.note, tooLong(GOAL_LIMITS.note))
+const whySchema = z.string().trim().max(GOAL_LIMITS.why, tooLong(GOAL_LIMITS.why))
+const milestoneTitleSchema = z
+  .string()
+  .trim()
+  .min(1, 'Name the step')
+  .max(GOAL_LIMITS.milestoneTitle, tooLong(GOAL_LIMITS.milestoneTitle))
+const checkinNoteSchema = z.string().trim().max(GOAL_LIMITS.checkinNote, tooLong(GOAL_LIMITS.checkinNote))
 
+/** A goal in words ("Become a better freelancer"); its key results say how it's measured. */
+export const objectiveSchema = z.object({
+  id: z.uuid(),
+  user_id: z.uuid(),
+  title: titleSchema,
+  why: whySchema.nullable().default(null),
+  created_at: timestampSchema,
+})
+export type Objective = z.output<typeof objectiveSchema>
+
+/**
+ * A key result (the `goals` table). `target` means: number → the target;
+ * habit → times a week (1–7); milestones / done → 1.
+ */
 export const goalSchema = z
   .object({
     id: z.uuid(),
     user_id: z.uuid(),
+    /** Older backups lack it; the database then gives the key result its own objective. */
+    objective_id: z.uuid().nullable().default(null),
+    kind: goalKindSchema.default('number'),
+    /** "done" key results: the day it was done. */
+    completed_on: dateKeySchema.nullable().default(null),
     title: titleSchema,
     short_label: shortLabelSchema,
     type: goalTypeSchema,
@@ -123,6 +175,32 @@ export const goalUpdateSchema = z.object({
 })
 export type GoalUpdate = z.infer<typeof goalUpdateSchema>
 
+/** One step of a milestones key result. */
+export const milestoneSchema = z.object({
+  id: z.uuid(),
+  user_id: z.uuid(),
+  goal_id: z.uuid(),
+  title: milestoneTitleSchema,
+  due_date: dateKeySchema.nullable(),
+  /** The day it was ticked done; null = still to do. */
+  done_on: dateKeySchema.nullable(),
+  position: z.number().int().min(0),
+  created_at: timestampSchema,
+})
+export type Milestone = z.infer<typeof milestoneSchema>
+
+/** "How confident am I about this goal?" 1–5, at most one per day. */
+export const checkinSchema = z.object({
+  id: z.uuid(),
+  user_id: z.uuid(),
+  objective_id: z.uuid(),
+  date: dateKeySchema,
+  confidence: z.number().int().min(1).max(5),
+  note: checkinNoteSchema.nullable(),
+  created_at: timestampSchema,
+})
+export type Checkin = z.infer<typeof checkinSchema>
+
 // ---------------------------------------------------------------------------
 // Forms
 // With React Hook Form: useForm<…FormInput, unknown, …FormValues>.
@@ -137,30 +215,145 @@ const amount = (required: string) =>
       .max(GOAL_LIMITS.target, 'That number is too large'),
   )
 
+/** A number field that may be left empty (only some key result kinds need it). */
+const optionalAmount = z.preprocess(
+  looseNumber,
+  z.coerce
+    .number({ error: 'Enter a number' })
+    .min(0, 'Use 0 or more')
+    .max(GOAL_LIMITS.target, 'That number is too large')
+    .optional(),
+)
+
+/** A new key result, ready to save. Steps without a name are left out. */
+export type KeyResultDraft =
+  | { kind: 'number'; title: string; unit: GoalUnit; start_value: number; target: number; start_date: DateKey; deadline: DateKey }
+  | { kind: 'milestones'; title: string; start_date: DateKey; deadline: DateKey; steps: { title: string; due_date: DateKey | null }[] }
+  /** routine_item_id null = ticked by hand on the goal. */
+  | { kind: 'habit'; title: string; per_week: number; routine_item_id: string | null; start_date: DateKey; deadline: DateKey }
+  | { kind: 'done'; title: string; start_date: DateKey; deadline: DateKey }
+
 /**
- * "New goal": any number you want to reach by a date, updated by hand.
- * Start date can be in the past; the deadline must be after `today` and after the start.
+ * The key result fields, flat so one form can switch between kinds.
+ * Fields another kind uses are ignored (e.g. `target` for a habit).
  */
-export function newGoalFormSchema(today: DateKey = getToday()) {
-  return z
-    .object({
-      title: titleSchema,
-      /** Optional: the first 24 characters of the name when left empty. */
-      short_label: z.string().trim().max(GOAL_LIMITS.shortLabel, tooLong(GOAL_LIMITS.shortLabel)),
-      unit: goalUnitSchema.default('eur'),
-      start_value: z.preprocess((v) => looseNumber(v) ?? 0, amount('Enter a starting point')),
-      target: amount('Enter a target'),
-      start_date: dateKeySchema.refine((date) => date <= today, 'The start can’t be in the future'),
-      deadline: dateKeySchema.refine((date) => date > today, 'Pick a date after today'),
-    })
-    .refine((v) => v.target > v.start_value, {
-      message: 'The target must be more than the starting point',
-      path: ['target'],
-    })
-    .transform((v) => ({ ...v, short_label: v.short_label || v.title.slice(0, GOAL_LIMITS.shortLabel).trim() }))
+function keyResultShape(today: DateKey) {
+  return {
+    kind: goalKindSchema,
+    kr_title: z.string().trim().max(GOAL_LIMITS.title, tooLong(GOAL_LIMITS.title)),
+    unit: goalUnitSchema.default('eur'),
+    start_value: optionalAmount,
+    target: optionalAmount,
+    per_week: optionalAmount,
+    /** HABIT_MANUAL or a routine item id. */
+    habit_source: z.string().default(HABIT_MANUAL),
+    start_date: dateKeySchema.refine((date) => date <= today, 'The start can’t be in the future'),
+    deadline: dateKeySchema.refine((date) => date > today, 'Pick a date after today'),
+    steps: z
+      .array(
+        z.object({
+          title: z.string().trim().max(GOAL_LIMITS.milestoneTitle, tooLong(GOAL_LIMITS.milestoneTitle)),
+          due_date: z.string().refine((d) => d === '' || isDateKey(d), 'Enter a valid date'),
+        }),
+      )
+      .max(GOAL_LIMITS.milestones, `Up to ${GOAL_LIMITS.milestones} steps`)
+      .default([]),
+  }
 }
-export type NewGoalFormInput = z.input<ReturnType<typeof newGoalFormSchema>>
-export type NewGoalFormValues = z.output<ReturnType<typeof newGoalFormSchema>>
+
+type KeyResultFields = z.output<z.ZodObject<ReturnType<typeof keyResultShape>>>
+
+/** The checks that depend on the kind. `needsTitle`: the "Add key result" form has no objective name to fall back on. */
+function checkKeyResult(v: KeyResultFields, ctx: z.RefinementCtx, needsTitle: boolean) {
+  const issue = (path: string, message: string) => ctx.addIssue({ code: 'custom', path: [path], message })
+  if (needsTitle && !v.kr_title) issue('kr_title', 'Name the key result')
+  if (v.deadline <= v.start_date) issue('deadline', 'The deadline must be after the start date')
+  if (v.kind === 'number') {
+    if (v.target === undefined) issue('target', 'Enter a target')
+    else if (v.target <= (v.start_value ?? 0)) issue('target', 'The target must be more than the starting point')
+  }
+  if (v.kind === 'habit') {
+    const perWeek = v.per_week
+    if (perWeek === undefined) issue('per_week', 'How many times a week?')
+    else if (!Number.isInteger(perWeek) || perWeek < 1 || perWeek > 7) issue('per_week', 'Use a whole number from 1 to 7')
+  }
+  if (v.kind === 'milestones') {
+    if (!v.steps.some((s) => s.title)) issue('steps', 'Add at least one step')
+    v.steps.forEach((s, i) => {
+      if (s.due_date && s.due_date > v.deadline) {
+        ctx.addIssue({ code: 'custom', path: ['steps', i, 'due_date'], message: 'Pick a day on or before the deadline' })
+      }
+    })
+  }
+}
+
+function toDraft(v: KeyResultFields, fallbackTitle: string): KeyResultDraft {
+  const title = v.kr_title || fallbackTitle
+  const dates = { start_date: v.start_date, deadline: v.deadline }
+  switch (v.kind) {
+    case 'number':
+      return { kind: 'number', title, unit: v.unit, start_value: v.start_value ?? 0, target: v.target ?? 0, ...dates }
+    case 'milestones':
+      return {
+        kind: 'milestones',
+        title,
+        ...dates,
+        steps: v.steps.filter((s) => s.title).map((s) => ({ title: s.title, due_date: s.due_date || null })),
+      }
+    case 'habit':
+      return {
+        kind: 'habit',
+        title,
+        per_week: v.per_week ?? 1,
+        routine_item_id: v.habit_source === HABIT_MANUAL ? null : v.habit_source,
+        ...dates,
+      }
+    case 'done':
+      return { kind: 'done', title, ...dates }
+  }
+}
+
+/**
+ * "New goal": the goal in words, why it matters, and its first key result.
+ * The key result's name may be left empty: it then uses the goal's name.
+ */
+export function newObjectiveFormSchema(today: DateKey = getToday()) {
+  return z
+    .object({ title: titleSchema, why: whySchema, ...keyResultShape(today) })
+    .superRefine((v, ctx) => checkKeyResult(v, ctx, false))
+    .transform((v) => ({ objective: { title: v.title, why: v.why || null }, keyResult: toDraft(v, v.title) }))
+}
+export type NewObjectiveFormInput = z.input<ReturnType<typeof newObjectiveFormSchema>>
+export type NewObjectiveFormValues = z.output<ReturnType<typeof newObjectiveFormSchema>>
+
+/** "Add key result" to an existing goal. */
+export function keyResultFormSchema(today: DateKey = getToday()) {
+  return z
+    .object(keyResultShape(today))
+    .superRefine((v, ctx) => checkKeyResult(v, ctx, true))
+    .transform((v) => toDraft(v, v.kr_title))
+}
+export type KeyResultFormInput = z.input<ReturnType<typeof keyResultFormSchema>>
+export type KeyResultFormValues = z.output<ReturnType<typeof keyResultFormSchema>>
+
+/** "Edit goal": its name and why it matters. */
+export const objectiveFormSchema = z.object({
+  title: titleSchema,
+  why: whySchema.transform((why) => why || null),
+})
+export type ObjectiveFormInput = z.input<typeof objectiveFormSchema>
+export type ObjectiveFormValues = z.output<typeof objectiveFormSchema>
+
+/** "Add step" on a milestones key result. */
+export const milestoneFormSchema = z.object({
+  title: milestoneTitleSchema,
+  due_date: z
+    .string()
+    .refine((d) => d === '' || isDateKey(d), 'Enter a valid date')
+    .transform((d) => d || null),
+})
+export type MilestoneFormInput = z.input<typeof milestoneFormSchema>
+export type MilestoneFormValues = z.output<typeof milestoneFormSchema>
 
 /** "Update goal": where the goal stands on a day (not before its start, not after today). */
 export function goalUpdateFormSchema(startDate: DateKey, today: DateKey = getToday()) {

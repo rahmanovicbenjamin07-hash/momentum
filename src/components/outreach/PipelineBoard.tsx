@@ -160,8 +160,11 @@ function BoardColumn({ stage, contacts, today, justDragged }: BoardColumnProps) 
       aria-label={`${label}, ${contacts.length}`}
       data-board-column={stage}
       className={cn(
-        'flex w-[200px] shrink-0 flex-col gap-2 self-start rounded-xl border bg-sunken p-2 transition-colors',
-        isOver ? 'border-brand bg-brand-tint' : 'border-transparent',
+        // Frosted column; while a lead is dragged over it, it brightens instead of turning blue.
+        'flex w-[200px] shrink-0 flex-col gap-2 self-start rounded-[18px] border p-2 backdrop-blur-xl backdrop-saturate-150 transition-colors',
+        isOver
+          ? 'border-white bg-white/85 dark:border-white/20 dark:bg-white/10'
+          : 'border-white/50 bg-white/40 dark:border-white/5 dark:bg-white/[0.03]',
       )}
     >
       <h3 className="flex items-center justify-between px-1 pt-1 text-sm font-semibold text-foreground">
@@ -237,7 +240,7 @@ function LeadCardBody({ lead, today, handle, className, ref, ...rest }: LeadCard
     <div
       ref={ref}
       data-board-card=""
-      className={cn('rounded-lg border border-border bg-card p-3 text-left select-none', className)}
+      className={cn('rounded-xl border border-white/70 bg-card/85 p-3 text-left select-none dark:border-white/10', className)}
       {...rest}
     >
       <div className="flex items-start gap-2">

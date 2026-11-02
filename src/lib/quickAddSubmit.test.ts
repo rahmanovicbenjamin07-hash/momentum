@@ -31,6 +31,16 @@ describe('buildQuickAdd', () => {
     })
   })
 
+  it('every week repeats on the chosen day’s weekday', () => {
+    // 28 Oct 2026 is a Wednesday, so tomorrow is a Thursday.
+    expect(buildQuickAdd(form({ text: 'Weekly review', repeat: 'every_week' }), TODAY)).toEqual({
+      ok: true,
+      value: { kind: 'routine', title: 'Weekly review', time: null, days: [false, false, true, false, false, false, false] },
+    })
+    const thursday = buildQuickAdd(form({ text: 'Football', repeat: 'every_week', day: 'tomorrow', time: '19:00' }), TODAY)
+    expect(thursday.ok && thursday.value.kind === 'routine' && thursday.value.days).toEqual([false, false, false, true, false, false, false])
+  })
+
   it('plans a task for tomorrow or a picked date', () => {
     const tomorrow = buildQuickAdd(form({ text: 'Send invoice', day: 'tomorrow' }), TODAY)
     expect(tomorrow.ok && tomorrow.value.kind === 'task' && tomorrow.value.dueDate).toBe('2026-10-29')

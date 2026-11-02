@@ -1,4 +1,4 @@
-import { Moon, Sun } from 'lucide-react'
+import { Moon, Plus, Sun } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ContactLayout } from '@/components/contact/ContactLayout'
 import { ContactBreadcrumb, ContactSummary } from '@/components/contact/ContactSummary'
@@ -22,23 +22,43 @@ import { Flame } from '@/components/streak/Flame'
 import { StreakCard } from '@/components/streak/StreakCard'
 import { StreakMini } from '@/components/streak/StreakMini'
 import { DailyNoteCard } from '@/components/today/DailyNoteCard'
-import { OutreachWeekCard } from '@/components/today/OutreachWeekCard'
 import { ProgressCard } from '@/components/today/ProgressCard'
 import { ThisWeekCard } from '@/components/today/ThisWeekCard'
 import { TodayHeader } from '@/components/today/TodayHeader'
 import { TodayLayout } from '@/components/today/TodayLayout'
 import { MissedYesterday } from '@/components/today/MissedYesterday'
 import { OverdueBlock } from '@/components/today/OverdueBlock'
-import { QuickAddBar } from '@/components/today/QuickAddBar'
+import { AddTaskDialog } from '@/components/today/AddTaskDialog'
 import { TodayTasksCard } from '@/components/today/TodayTasksCard'
+import { WeekGrid } from '@/components/week/WeekGrid'
+import { WeekHeader } from '@/components/week/WeekHeader'
+import { weekRangeLabel } from '@/lib/week'
+import { MOCK_WEEK_FIRST, mockWeekColumns } from '@/mocks/week'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { FinanceEntriesList } from '@/components/finance/FinanceEntriesList'
+import { FinanceEntryForm } from '@/components/finance/FinanceEntryForm'
+import { FinanceTabs } from '@/components/finance/FinanceTabs'
+import type { FinanceTab } from '@/components/finance/meta'
+import { CategoryBreakdown, FinanceSummary } from '@/components/finance/FinanceSummary'
+import { FinanceYearCharts } from '@/components/finance/FinanceYearCharts'
+import { StartingSavingsCard } from '@/components/finance/StartingSavingsCard'
+import {
+  byCategory,
+  categoryOptions,
+  entriesInMonth,
+  formatMonthLong,
+  monthEnd,
+  savedOn,
+  toEur,
+  totals,
+  yearByMonth,
+} from '@/lib/finance'
+import { mockFinanceEntries, mockStartingSavings } from '@/mocks/finance'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { STREAK_LEVELS } from '@/lib/streak-levels'
-import { dayIndex, toDateKey } from '@/lib/dates'
 import { todayProgress } from '@/lib/progress'
-import { toHHMM } from '@/lib/today-list'
 import { AddLeadForm } from '@/components/outreach/AddLeadForm'
 import { ContactsTable } from '@/components/outreach/ContactsTable'
 import { CsvImportDialog, type CsvPreview } from '@/components/outreach/CsvImportDialog'
@@ -124,6 +144,14 @@ import { NewGoalDialog } from '@/components/goals/NewGoalDialog'
 import { GoalUpdateDialog } from '@/components/goals/GoalUpdateDialog'
 import { GoalUpdatesList } from '@/components/goals/GoalUpdatesList'
 import { DeleteGoalDialog } from '@/components/goals/DeleteGoalDialog'
+import { DoneToggle } from '@/components/goals/DoneToggle'
+import { EditObjectiveDialog } from '@/components/goals/EditObjectiveDialog'
+import { HabitTracker } from '@/components/goals/HabitTracker'
+import { KeyResultCard } from '@/components/goals/KeyResultCard'
+import { KeyResultDialog } from '@/components/goals/KeyResultDialog'
+import { MilestoneList } from '@/components/goals/MilestoneList'
+import { ObjectiveHeader } from '@/components/goals/ObjectiveHeader'
+import { formatDate } from '@/lib/dates'
 import { PaceSlider } from '@/components/goals/PaceSlider'
 import { buildGoalChart, forecastSentence, formatGoalValue, neededSentence } from '@/lib/goalChart'
 import { DAYS_PER_MONTH } from '@/lib/forecast'
@@ -132,55 +160,31 @@ import {
   MOCK_GOALS_TODAY,
   mockGoalChips,
   mockGoalUpdates,
+  mockHabitDays,
+  mockHabitWeeks,
+  mockMilestones,
+  mockObjective,
   mockMoneyGoalChart,
   mockMoneyGoalHeader,
   mockMoneyGoalMonths,
   mockPipelineDeals,
   mockPipelineTotal,
 } from '@/mocks/goals'
-import { AiSummaryCard } from '@/components/improve/AiSummaryCard'
-import { ExperimentsList } from '@/components/improve/ExperimentsList'
-import { IdeasList } from '@/components/improve/IdeasList'
-import { ImproveHeader } from '@/components/improve/ImproveHeader'
-import { ImproveLayout } from '@/components/improve/ImproveLayout'
-import { ImproveTabs } from '@/components/improve/ImproveTabs'
-import { improvePanelId, improveTabId, type ImproveTab } from '@/components/improve/meta'
-import { PastReviews } from '@/components/improve/PastReviews'
-import { ReviewCard, type ReviewTexts } from '@/components/improve/ReviewCard'
-import { RunningExperimentCard } from '@/components/improve/RunningExperimentCard'
-import { WeeklyGoalsCard } from '@/components/improve/WeeklyGoalsCard'
-import { LessonsList } from '@/components/improve/LessonsList'
-import type { ReviewStatus } from '@/schemas/improve'
-import {
-  MOCK_IMPROVE_TODAY,
-  mockExperiments,
-  mockIdeas,
-  mockImproveLessons,
-  mockPastReviews,
-  mockReview,
-  mockReviewWeekLabel,
-  mockRunningExperiment,
-  mockWeeklyGoals,
-} from '@/mocks/improve'
 import { AppearanceSettings } from '@/components/settings/AppearanceSettings'
 import { DataSettings } from '@/components/settings/DataSettings'
+import { DateTimeSettings } from '@/components/settings/DateTimeSettings'
 import { IntegrationsSettings } from '@/components/settings/IntegrationsSettings'
-import { NotificationsSettings, type NotificationChange } from '@/components/settings/NotificationsSettings'
+import { SETTINGS_PANEL_ID, settingsTabId, type SettingsSection } from '@/components/settings/meta'
+import { NotificationsComingSoon } from '@/components/settings/NotificationsComingSoon'
 import { SettingsHeader } from '@/components/settings/SettingsHeader'
 import { SettingsTabs } from '@/components/settings/SettingsTabs'
-import {
-  mockAppearance,
-  mockBackupEnabled,
-  mockBackups,
-  mockNotificationMaster,
-  mockNotificationRows,
-  mockQuietHours,
-} from '@/mocks/settings'
+import { mockAppearance, mockBackupEnabled, mockBackups } from '@/mocks/settings'
 import {
   MOCK_STATS_TODAY,
   mockCompletion,
   mockCompletionWithGaps,
   mockConsistency,
+  MOCK_CONSISTENCY_START,
   mockConsistencyInsight,
   mockFunnel,
   mockInsights,
@@ -195,9 +199,7 @@ import {
   MOCK_TODAY,
   mockMissedYesterday,
   mockOverdueTasks,
-  mockRoutineItems,
   mockDailyLog,
-  mockOutreachWeek,
   mockTodayItems,
   mockWeekProgress,
 } from '@/mocks/today'
@@ -262,36 +264,15 @@ function levelRange(minDays: number, nextMinDays: number | undefined) {
   return `${minDays}–${nextMinDays - 1} days`
 }
 
-/** TodayTasksCard with mock data kept in local state, so ticking and editing feel real. */
+/** TodayTasksCard with mock data kept in local state, so ticking and removing feel real. */
 function TasksDemo() {
   const [items, setItems] = useState(mockTodayItems)
-  const [routineItems, setRoutineItems] = useState(mockRoutineItems)
-  // Mock "today" is Wednesday 28 Oct 2026.
-  const today = dayIndex(toDateKey(sampleDate))
 
   return (
     <TodayTasksCard
       items={items}
-      routineItems={routineItems}
       onToggle={(item, done) => setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, done } : i)))}
-      onChangeDays={(id, days) => {
-        setRoutineItems((prev) => prev.map((r) => (r.id === id ? { ...r, days } : r)))
-        setItems((prev) => {
-          const routine = routineItems.find((r) => r.id === id)
-          const listed = prev.some((i) => i.id === id)
-          if (!days[today]) return prev.filter((i) => i.id !== id)
-          if (listed || !routine) return prev.map((i) => (i.id === id ? { ...i, days } : i))
-          return [...prev, { kind: 'routine', id, title: routine.title, time: toHHMM(routine.time), done: false, days }]
-        })
-        log('days')({ id, days })
-      }}
-      onChangeTime={(id, time) => {
-        setRoutineItems((prev) => prev.map((r) => (r.id === id ? { ...r, time } : r)))
-        setItems((prev) => prev.map((i) => (i.id === id ? { ...i, time } : i)))
-        log('time')({ id, time })
-      }}
       onRemove={(id) => {
-        setRoutineItems((prev) => prev.filter((r) => r.id !== id))
         setItems((prev) => prev.filter((i) => i.id !== id))
         log('remove')(id)
       }}
@@ -299,18 +280,59 @@ function TasksDemo() {
   )
 }
 
-/** Quick-add bar + missed-yesterday + overdue, with local state and a reset button. */
+/** Week view with local ticks (Wed 4 Nov 2026 is today). */
+function WeekDemo() {
+  const [columns, setColumns] = useState(mockWeekColumns)
+  return (
+    <div className="glass-page">
+      <WeekHeader title="This week" range={weekRangeLabel(MOCK_WEEK_FIRST)} isThisWeek {...noopWeekNav} />
+      <WeekGrid
+        columns={columns}
+        dayHref={(date) => `/?day=${date}`}
+        onAdd={log('add on')}
+        onToggle={(item, done, date) =>
+          setColumns((prev) =>
+            prev.map((c) => {
+              if (c.date !== date) return c
+              const items = c.items.map((i) => (i.id === item.id && i.kind === item.kind ? { ...i, done } : i))
+              const doneCount = items.filter((i) => i.done).length
+              return { ...c, items, done: doneCount, percent: Math.round((doneCount / items.length) * 100) }
+            }),
+          )
+        }
+      />
+    </div>
+  )
+}
+
+const noopWeekNav = {
+  onPrevWeek: () => log('week')('previous'),
+  onThisWeek: () => log('week')('this'),
+  onNextWeek: () => log('week')('next'),
+  onDayView: () => log('week')('day view'),
+}
+
+/** Add task pop-up + missed-yesterday + overdue, with local state and a reset button. */
 function PromptsDemo() {
+  const [addOpen, setAddOpen] = useState(false)
   const [missed, setMissed] = useState(mockMissedYesterday)
   const [overdue, setOverdue] = useState(mockOverdueTasks)
 
   return (
     <div className="flex max-w-[830px] flex-col gap-4">
-      <QuickAddBar
+      <Button className="w-fit" onClick={() => setAddOpen(true)}>
+        <Plus aria-hidden="true" />
+        Add task
+      </Button>
+      <AddTaskDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        today={MOCK_TODAY}
         onSubmit={async (result) => {
           await new Promise((resolve) => setTimeout(resolve, 300))
           if (result.title.includes('fail')) throw new Error("Couldn't save. Check your connection and try again.")
           log('add')(result)
+          setAddOpen(false)
         }}
       />
       <MissedYesterday
@@ -720,6 +742,75 @@ function MetricsDemo() {
   )
 }
 
+/** The Finance page's parts with mock entries in local state. Mock today: 2 Nov 2026. */
+function FinanceDemo() {
+  const today = '2026-11-02'
+  const [entries, setEntries] = useState(mockFinanceEntries)
+  const [month, setMonth] = useState('2026-11')
+  const [start, setStart] = useState<{ amount: number; currency: 'eur' | 'bam'; date: string } | null>(mockStartingSavings)
+  const startEur = start ? { amount_eur: toEur(start.amount, start.currency), date: start.date } : null
+  const monthEntries = entriesInMonth(entries, month)
+  const categories = { income: categoryOptions(entries, 'income'), expense: categoryOptions(entries, 'expense') }
+  const end = monthEnd(month)
+  const [tab, setTab] = useState<FinanceTab>('logs')
+  return (
+    <div className="today-glass flex flex-col gap-4">
+      <div>
+        <FinanceTabs active={tab} onSelect={setTab} />
+        <p className="text-sm text-ink-2">Picked tab: {tab}</p>
+      </div>
+      <div className="glass-form max-w-[520px] rounded-xl border border-border p-4">
+        <FinanceEntryForm
+          categories={categories}
+          today={today}
+          onSubmit={async (values) => {
+            await new Promise((resolve) => setTimeout(resolve, 300))
+            if (values.note?.includes('fail')) throw new Error("Couldn't save it. Your entry is still here, so try again.")
+            const row = {
+              ...mockFinanceEntries[0]!,
+              ...values,
+              id: crypto.randomUUID(),
+              amount_eur: toEur(values.amount, values.currency),
+            }
+            setEntries((prev) => [row, ...prev].sort((a, b) => b.date.localeCompare(a.date)))
+            log('added')(values)
+          }}
+        />
+      </div>
+      <FinanceEntriesList
+        monthLabel={formatMonthLong(month)}
+        totals={totals(monthEntries)}
+        entries={monthEntries}
+        onEdit={log('edit')}
+        onDelete={(entry) => setEntries((prev) => prev.filter((e) => e.id !== entry.id))}
+      />
+      <FinanceSummary
+        monthLabel={formatMonthLong(month)}
+        totals={totals(monthEntries)}
+        saved={month > '2026-11' ? null : savedOn(entries, startEur, end < today ? end : today)}
+        savedNote="Counting from €3,000 on 1 Aug 2026"
+      />
+      <CategoryBreakdown spent={byCategory(monthEntries, 'expense')} earned={byCategory(monthEntries, 'income')} />
+      <FinanceYearCharts year={2026} rows={yearByMonth(entries, startEur, 2026, today)} selectedMonth={month} onSelectMonth={setMonth} />
+      <StartingSavingsCard
+        current={start}
+        today={today}
+        onSave={(values) => {
+          setStart({ amount: values.amount, currency: values.currency, date: values.date })
+          log('starting savings')(values)
+        }}
+      />
+      <StartingSavingsCard
+        current={null}
+        today={today}
+        onSave={(values) => {
+          log('starting savings (empty card)')(values)
+        }}
+      />
+    </div>
+  )
+}
+
 /** Goals page top: chips, then the money goal's header and pipeline box, with local state. */
 function GoalsDemo() {
   const [selected, setSelected] = useState('g-money')
@@ -737,10 +828,17 @@ function GoalsDemo() {
       />
       <div className="flex flex-col gap-4 rounded-[10px] border border-border bg-card p-6">
         <GoalHeader
-          sourceLine={header.sourceLine}
           title={header.title}
           progressText={pipeline ? header.progressText : header.progressTextNoPipeline}
           status={header.status}
+          actions={
+            <>
+              <Button onClick={() => log('update')()}>Update</Button>
+              <Button variant="outline" onClick={() => log('delete goal')()}>
+                Delete goal
+              </Button>
+            </>
+          }
         />
         <PipelineToggle
           checked={pipeline}
@@ -830,9 +928,151 @@ function GoalChartDemo() {
         today={today}
         onSubmit={async (values) => {
           await new Promise((resolve) => setTimeout(resolve, 300))
-          if (values.title.includes('fail')) throw new Error("Couldn't save. Check your connection and try again.")
+          if (values.objective.title.includes('fail')) throw new Error("Couldn't save. Check your connection and try again.")
           log('goal created')(values)
           setNewOpen(false)
+        }}
+      />
+    </div>
+  )
+}
+
+/** An objective with a number, steps, habit and done / not done key result and its dialogs, with local state. */
+function ObjectiveDemo() {
+  const today = MOCK_GOALS_TODAY
+  const [milestones, setMilestones] = useState(mockMilestones)
+  const [days, setDays] = useState(mockHabitDays)
+  const [done, setDone] = useState(false)
+  const [dialog, setDialog] = useState<'add' | 'edit' | 'delete' | null>(null)
+  const close = (open: boolean) => !open && setDialog(null)
+  const stepsDone = milestones.filter((m) => m.done_on).length
+  const stepsPercent = milestones.length ? Math.floor((stepsDone / milestones.length) * 100) : 0
+  const ticked = days.filter((d) => d.done).length
+  const habitWeeks = mockHabitWeeks.map((w) => (w.current ? { ...w, count: ticked, hit: ticked >= 3 } : w))
+  const fail = (text: string) => text.includes('fail')
+
+  return (
+    <div className="flex flex-col gap-4 rounded-xl border border-dashed border-border p-4">
+      <ObjectiveHeader
+        line={mockObjective.line}
+        title={mockObjective.title}
+        why={mockObjective.why}
+        overall={{ percent: mockObjective.percent, status: mockObjective.status }}
+        actions={
+          <>
+            <Button onClick={() => setDialog('add')}>
+              <Plus aria-hidden="true" />
+              Add key result
+            </Button>
+            <Button variant="outline" onClick={() => setDialog('edit')}>
+              Edit goal
+            </Button>
+            <Button variant="outline" onClick={() => setDialog('delete')}>
+              Delete goal
+            </Button>
+          </>
+        }
+      />
+      <ObjectiveHeader line="NO KEY RESULTS YET" title="Learn Spanish" why={null} />
+      <KeyResultCard
+        title="Have 10,000 KM saved"
+        headline={
+          <>
+            <p className="text-lg leading-snug font-semibold text-foreground">
+              At your current pace (900 KM a month) you&apos;ll reach 10,000 KM on 10 Jul 2027 — 68 days after your deadline.
+            </p>
+            <p className="mt-1 text-[13px] text-ink-2">To finish by 3 May 2027 you need 1,166 KM a month.</p>
+          </>
+        }
+        actions={<Button onClick={log('update')}>Update</Button>}
+        progress="5,200 KM of 10,000 KM · started at 3,000 KM"
+        percent={31}
+        status="slightly_behind"
+        onDelete={log('delete key result')}
+      />
+      <KeyResultCard
+        title="Launch the new website"
+        progress={`${stepsDone} of ${milestones.length} steps done`}
+        percent={stepsPercent}
+        status={stepsDone === milestones.length && milestones.length > 0 ? 'reached' : 'slightly_behind'}
+        onDelete={log('delete key result')}
+      >
+        <MilestoneList
+          milestones={milestones}
+          today={today}
+          onToggle={(id, isDone) => setMilestones((prev) => prev.map((m) => (m.id === id ? { ...m, done_on: isDone ? today : null } : m)))}
+          onDelete={(id) => setMilestones((prev) => prev.filter((m) => m.id !== id))}
+          onAdd={async (values) => {
+            await new Promise((resolve) => setTimeout(resolve, 300))
+            if (fail(values.title)) throw new Error("Couldn't add the step. Try again.")
+            setMilestones((prev) => [...prev, { id: crypto.randomUUID(), done_on: null, ...values }])
+          }}
+        />
+      </KeyResultCard>
+      <KeyResultCard
+        title="Gym 3 times a week"
+        progress="6 of 30 weeks hit · 3-week streak"
+        percent={20}
+        status="on_track"
+        onDelete={log('delete key result')}
+      >
+        <HabitTracker
+          perWeek={3}
+          days={days}
+          weeks={habitWeeks}
+          linkedTo={null}
+          summary="Hit 6 of 7 weeks so far (86%)"
+          onToggleDay={(date, isDone) => setDays((prev) => prev.map((d) => (d.date === date ? { ...d, done: isDone } : d)))}
+        />
+      </KeyResultCard>
+      <KeyResultCard
+        title="Wake up at 06:00 on weekdays"
+        progress="0 of 10 weeks hit"
+        percent={0}
+        status="on_track"
+        onDelete={log('delete key result')}
+      >
+        <HabitTracker perWeek={5} days={mockHabitDays} weeks={[]} linkedTo="Wake up at 06:00" summary="No full week yet" onToggleDay={log('tick')} />
+      </KeyResultCard>
+      <KeyResultCard
+        title="Get a business bank account"
+        actions={<DoneToggle done={done} onChange={setDone} />}
+        progress={done ? `Done on ${formatDate(today)}` : 'Not done yet · 33 days left'}
+        percent={done ? 100 : 0}
+        status={done ? 'reached' : 'on_track'}
+        onDelete={log('delete key result')}
+      />
+
+      <KeyResultDialog
+        open={dialog === 'add'}
+        onOpenChange={close}
+        goalTitle={mockObjective.title}
+        routineItems={[{ id: '44444444-4444-4444-8444-444444444444', title: 'Wake up at 06:00' }]}
+        today={today}
+        onSubmit={async (values) => {
+          await new Promise((resolve) => setTimeout(resolve, 300))
+          if (fail(values.title)) throw new Error("Couldn't add the key result. Try again.")
+          log('key result added')(values)
+          setDialog(null)
+        }}
+      />
+      <EditObjectiveDialog
+        open={dialog === 'edit'}
+        onOpenChange={close}
+        title={mockObjective.title}
+        why={mockObjective.why}
+        onSubmit={(values) => {
+          log('goal saved')(values)
+          setDialog(null)
+        }}
+      />
+      <DeleteGoalDialog
+        open={dialog === 'delete'}
+        onOpenChange={close}
+        goalTitle={mockObjective.title}
+        onConfirm={() => {
+          log('delete goal')()
+          setDialog(null)
         }}
       />
     </div>
@@ -922,201 +1162,76 @@ function StatsHeaderDemo() {
   )
 }
 
-/** Whole Improvements page with local state: switch tabs, edit and save the review, add/delete lessons, experiments, ideas. */
-function ImproveDemo() {
-  const [tab, setTab] = useState<ImproveTab>('review')
-  const [texts, setTexts] = useState<ReviewTexts>({
-    wins: mockReview.wins,
-    misses: mockReview.misses,
-    lesson: mockReview.lesson,
-    focus: mockReview.focus,
-  })
-  const [status, setStatus] = useState<ReviewStatus>(mockReview.status)
-  const [saving, setSaving] = useState(false)
-  const [lessons, setLessons] = useState(mockImproveLessons)
-  const [experiments, setExperiments] = useState(mockExperiments)
-  const [ideas, setIdeas] = useState(mockIdeas)
-  const wait = () => new Promise((resolve) => setTimeout(resolve, 300))
-  const row = () => ({ id: crypto.randomUUID(), user_id: mockReview.user_id, created_at: new Date().toISOString() })
-  const failIf = (text: string) => {
-    if (text.includes('fail')) throw new Error("Couldn't save. Check your connection and try again.")
-  }
-
-  const main =
-    tab === 'review' ? (
-      <>
-        <ReviewCard
-          weekLabel={mockReviewWeekLabel}
-          status={status}
-          numbers={mockReview.stats_snapshot}
-          values={texts}
-          onPrevWeek={log('previous week')}
-          onNextWeek={log('next week')}
-          onChange={(values) => {
-            setTexts(values)
-            setStatus('draft')
-          }}
-          onSave={(values) => {
-            setSaving(true)
-            setTimeout(() => {
-              setSaving(false)
-              setStatus('saved')
-              log('review saved')(values)
-            }, 400)
-          }}
-          onFocusToExperiment={(focus) => {
-            setTab('experiments')
-            log('focus → experiment')(focus)
-          }}
-          saving={saving}
-        />
-        <PastReviews items={mockPastReviews.map((item) => ({ ...item, onOpen: () => log('open review')(item.weekLabel) }))} />
-      </>
-    ) : tab === 'lessons' ? (
-      <LessonsList
-        lessons={lessons}
-        onAdd={async (values) => {
-          await wait()
-          failIf(values.text)
-          setLessons((prev) => [{ ...row(), ...values }, ...prev])
-        }}
-        onDelete={(lesson) => setLessons((prev) => prev.filter((l) => l.id !== lesson.id))}
-      />
-    ) : tab === 'experiments' ? (
-      <ExperimentsList
-        experiments={experiments}
-        today={MOCK_IMPROVE_TODAY}
-        onAdd={async (values) => {
-          await wait()
-          failIf(values.title)
-          setExperiments((prev) => [
-            { ...row(), ...values, status: 'running', before_value: null, during_value: null, result: '' },
-            ...prev,
-          ])
-        }}
-        onSetStatus={(experiment, next) =>
-          setExperiments((prev) => prev.map((e) => (e.id === experiment.id ? { ...e, status: next } : e)))
-        }
-        onDelete={(experiment) => setExperiments((prev) => prev.filter((e) => e.id !== experiment.id))}
-      />
-    ) : (
-      <IdeasList
-        ideas={ideas}
-        onAdd={async (values) => {
-          await wait()
-          failIf(values.text)
-          setIdeas((prev) => [{ ...row(), ...values, status: 'new' }, ...prev])
-        }}
-        onMakeTask={(idea) => log('make task')(idea.text)}
-        onTestIt={(idea) => {
-          setIdeas((prev) => prev.map((i) => (i.id === idea.id ? { ...i, status: 'testing' } : i)))
-          log('test it')(idea.text)
-        }}
-        onSetStatus={(idea, next) => setIdeas((prev) => prev.map((i) => (i.id === idea.id ? { ...i, status: next } : i)))}
-        onDelete={(idea) => setIdeas((prev) => prev.filter((i) => i.id !== idea.id))}
-      />
-    )
-
-  return (
-    <>
-      <ImproveHeader onNewReview={log('new review')} />
-      <ImproveTabs
-        active={tab}
-        counts={{ lessons: lessons.length, experiments: experiments.length, ideas: ideas.length }}
-        onChange={setTab}
-      />
-      <div role="tabpanel" id={improvePanelId(tab)} aria-labelledby={improveTabId(tab)}>
-        <ImproveLayout
-          main={main}
-          aside={
-            <>
-              <RunningExperimentCard {...mockRunningExperiment} />
-              <WeeklyGoalsCard rows={mockWeeklyGoals} onEdit={log('edit weekly goals')} />
-              <AiSummaryCard />
-            </>
-          }
-        />
-      </div>
-    </>
-  )
-}
-
-/** Whole Settings page with local state: switches, times, theme, selects, backups and both dialogs. */
+/** Whole Settings page with local state: tabs, theme, selects, backups and both dialogs. */
 function SettingsDemo() {
-  const [master, setMaster] = useState(mockNotificationMaster)
-  const [rows, setRows] = useState(mockNotificationRows)
-  const [quiet, setQuiet] = useState(mockQuietHours)
+  const [tab, setTab] = useState<SettingsSection>('appearance')
   const [appearance, setAppearance] = useState(mockAppearance)
   const [backupEnabled, setBackupEnabled] = useState(mockBackupEnabled)
   const [showBackups, setShowBackups] = useState(true)
   const wait = () => new Promise((resolve) => setTimeout(resolve, 400))
 
-  const changeNotification = (change: NotificationChange) => {
-    log('notification')(change)
-    if (change.key === 'master') {
-      setMaster(change.enabled ?? master)
-    } else if (change.key === 'quiet_hours') {
-      setQuiet((q) => ({
-        enabled: change.enabled ?? q.enabled,
-        start: change.time !== undefined ? change.time : q.start,
-        end: change.time_end !== undefined ? change.time_end : q.end,
-      }))
-    } else {
-      setRows((prev) =>
-        prev.map((r) =>
-          r.key === change.key
-            ? { ...r, enabled: change.enabled ?? r.enabled, time: change.time !== undefined ? change.time : r.time }
-            : r,
-        ),
-      )
-    }
-  }
-
   return (
     <>
       <SettingsHeader />
-      <SettingsTabs />
-      <div className="flex flex-col gap-5">
-        <NotificationsSettings master={master} rows={rows} quietHours={quiet} onChange={changeNotification} />
-        <AppearanceSettings
-          theme={appearance.theme}
-          weekStart={appearance.weekStart}
-          dayEndHour={appearance.dayEndHour}
-          language={appearance.language}
-          onChange={(change) => {
-            log('appearance')(change)
-            setAppearance((a) => ({
-              ...a,
-              theme: change.theme ?? a.theme,
-              weekStart: change.week_start ?? a.weekStart,
-              dayEndHour: change.day_end_hour ?? a.dayEndHour,
-            }))
-          }}
-        />
-        <DataSettings
-          backupEnabled={backupEnabled}
-          backups={showBackups ? mockBackups : []}
-          onExportCsv={log('export CSV')}
-          onExportJson={log('export JSON')}
-          onImportCsv={log('import CSV')}
-          onToggleBackup={(enabled) => {
-            setBackupEnabled(enabled)
-            log('daily backup')(enabled)
-          }}
-          onRestore={async (path) => {
-            await wait()
-            if (path.includes('10-26')) throw new Error("Couldn't restore that backup. Try again in a minute.")
-            log('restored')(path)
-          }}
-          onDeleteAccount={async () => {
-            await wait()
-            log('account deleted')()
-          }}
-        />
-        <IntegrationsSettings />
-        <Button variant="outline" className="w-fit bg-card" onClick={() => setShowBackups((v) => !v)}>
-          {showBackups ? 'Show the no-backups state' : 'Show the backups again'}
-        </Button>
+      <SettingsTabs active={tab} onSelect={setTab} />
+      <div role="tabpanel" id={SETTINGS_PANEL_ID} aria-labelledby={settingsTabId(tab)} className="flex flex-col gap-5">
+        {tab === 'appearance' && (
+          <AppearanceSettings
+            theme={appearance.theme}
+            onChange={(change) => {
+              log('appearance')(change)
+              setAppearance((a) => ({ ...a, theme: change.theme }))
+            }}
+          />
+        )}
+        {tab === 'datetime' && (
+          <DateTimeSettings
+            weekStart={appearance.weekStart}
+            dayEndHour={appearance.dayEndHour}
+            language={appearance.language}
+            onChange={(change) => {
+              log('date & time')(change)
+              setAppearance((a) => ({
+                ...a,
+                weekStart: change.week_start ?? a.weekStart,
+                dayEndHour: change.day_end_hour ?? a.dayEndHour,
+              }))
+            }}
+          />
+        )}
+        {tab === 'notifications' && <NotificationsComingSoon />}
+        {tab === 'data' && (
+          <DataSettings
+            backupEnabled={backupEnabled}
+            backups={showBackups ? mockBackups : []}
+            onExportCsv={log('export CSV')}
+            onExportJson={log('export JSON')}
+            onImportCsv={log('import CSV')}
+            onToggleBackup={(enabled) => {
+              setBackupEnabled(enabled)
+              log('daily backup')(enabled)
+            }}
+            onRestore={async (path) => {
+              await wait()
+              if (path.includes('10-26')) throw new Error("Couldn't restore that backup. Try again in a minute.")
+              log('restored')(path)
+            }}
+            onResetAll={async () => {
+              await wait()
+              log('reset everything')()
+            }}
+            onDeleteAccount={async () => {
+              await wait()
+              log('account deleted')()
+            }}
+          />
+        )}
+        {tab === 'data' && (
+          <Button variant="outline" className="w-fit bg-card" onClick={() => setShowBackups((v) => !v)}>
+            {showBackups ? 'Show the no-backups state' : 'Show the backups again'}
+          </Button>
+        )}
+        {tab === 'integrations' && <IntegrationsSettings />}
       </div>
     </>
   )
@@ -1260,14 +1375,12 @@ export default function DevPreview() {
                 <>
                   <ProgressCard progress={todayProgress(mockTodayItems)} />
                   <StreakCard days={12} />
-                  <OutreachWeekCard {...mockOutreachWeek} />
                 </>
               }
-              quickAdd={<Placeholder label="Quick add (see the demo below)" className="h-20" />}
               main={<Placeholder label="Missed yesterday, overdue and today's tasks (see the demos below)" className="h-64" />}
               aside={
                 <>
-                  <ThisWeekCard week={mockWeekProgress} outreach={mockOutreachWeek} />
+                  <ThisWeekCard week={mockWeekProgress} />
                   <NoteDemo />
                 </>
               }
@@ -1293,13 +1406,36 @@ export default function DevPreview() {
           </div>
         </Section>
 
-        <Section title="QuickAddBar, MissedYesterday, OverdueBlock (put 'fail' in a task to see an error)">
+        <Section title="Add task pop-up, MissedYesterday, OverdueBlock (put 'fail' in a task to see an error)">
           <PromptsDemo />
         </Section>
 
-        <Section title="TodayTasksCard (tick, filter, Edit repeating — changes stay until reload)">
+        <Section title="TodayTasksCard (tick, filter, arrow folds it — changes stay until reload)">
           <div className="max-w-[830px]">
             <TasksDemo />
+          </div>
+        </Section>
+
+        <Section title="Week view (tick tasks, '+ Add' and the arrows log to the console; narrow the window: 4 / 2 / 1 columns, today first on phones)">
+          <WeekDemo />
+        </Section>
+        <Section title="TodayTasksCard for tomorrow (starts folded)">
+          <div className="flex max-w-[830px] flex-col gap-4">
+            <TodayTasksCard
+              day="tomorrow"
+              items={mockTodayItems.slice(0, 4).map((item) => ({ ...item, done: false }))}
+              defaultCollapsed
+              onCollapsedChange={log('collapsed')}
+              onToggle={log('toggle')}
+              onRemove={log('remove')}
+              onDeleteTask={log('delete')}
+            />
+            <TodayTasksCard
+              day="tomorrow"
+              items={[]}
+              onToggle={log('toggle')}
+              onRemove={log('remove')}
+            />
           </div>
         </Section>
 
@@ -1399,6 +1535,7 @@ export default function DevPreview() {
               <ConsistencyHeatmap
                 days={mockConsistency}
                 today={MOCK_STATS_TODAY}
+                start={MOCK_CONSISTENCY_START}
                 insight={
                   <>
                     <strong className="font-semibold">Insight:</strong> {mockConsistencyInsight}
@@ -1508,37 +1645,12 @@ export default function DevPreview() {
           <GoalUpdatesDemo />
         </Section>
 
-        <Section title="Improvements (switch tabs or Tab + ← → Home End; edit and save the review; add/delete lessons, experiments, ideas; 'fail' in a new item shows an error)">
-          <div className="rounded-xl border border-dashed border-border p-4">
-            <ImproveDemo />
-          </div>
+        <Section title="Goals: objective + key results (tick steps, add a step, tick days this week, Mark as done; Add key result / Edit goal / Delete goal open dialogs; 'fail' in a step or key result shows an error)">
+          <ObjectiveDemo />
         </Section>
 
-        <Section title="Improvements: empty states and a worse experiment">
-          <div className="grid gap-4 lg:grid-cols-3">
-            <RunningExperimentCard onStart={log('start experiment')} />
-            <RunningExperimentCard {...mockRunningExperiment} during="11.5%" better={false} day={14} />
-            <WeeklyGoalsCard rows={[]} onEdit={log('edit weekly goals')} />
-            <PastReviews items={[]} />
-            <LessonsList lessons={[]} onAdd={(v) => void log('add lesson')(v)} onDelete={log('delete lesson')} />
-            <IdeasList
-              ideas={[]}
-              onAdd={(v) => void log('add idea')(v)}
-              onMakeTask={log('make task')}
-              onTestIt={log('test it')}
-              onSetStatus={log('status')}
-              onDelete={log('delete idea')}
-            />
-          </div>
-          <div className="mt-4">
-            <ExperimentsList
-              experiments={[]}
-              today={MOCK_IMPROVE_TODAY}
-              onAdd={(v) => void log('add experiment')(v)}
-              onSetStatus={log('status')}
-              onDelete={log('delete experiment')}
-            />
-          </div>
+        <Section title="Finance (add money, edit/delete entries, click a month on the charts; 'fail' in a note shows an error)">
+          <FinanceDemo />
         </Section>
 
         <Section title="Settings (tabs scroll to each card; turn the master switch off to grey out the rows; Restore 'Mon 26 Oct' shows an error; Delete account needs DELETE typed)">

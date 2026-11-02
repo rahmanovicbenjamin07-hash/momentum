@@ -1,18 +1,17 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ComponentProps } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import { mockRoutineItems, mockTodayItems } from '@/mocks/today'
+import { mockTodayItems } from '@/mocks/today'
 import type { TodayItem } from '@/schemas/today'
 import { TodayTasksCard } from './TodayTasksCard'
 
-function setup(items: TodayItem[] = mockTodayItems) {
+function setup(items: TodayItem[] = mockTodayItems, extra: Partial<ComponentProps<typeof TodayTasksCard>> = {}) {
   const handlers = {
     onToggle: vi.fn<(item: TodayItem, done: boolean) => void>(),
-    onChangeDays: vi.fn<(id: string, days: boolean[]) => void>(),
-    onChangeTime: vi.fn<(id: string, time: string | null) => void>(),
     onRemove: vi.fn<(id: string) => void>(),
   }
-  render(<TodayTasksCard items={items} routineItems={mockRoutineItems} {...handlers} />)
+  render(<TodayTasksCard items={items} {...handlers} {...extra} />)
   return handlers
 }
 
@@ -65,14 +64,37 @@ describe('TodayTasksCard', () => {
     expect(h.onToggle).toHaveBeenCalledWith(expect.objectContaining({ title: 'Read 20 pages' }), true)
   })
 
-  it('switches to Edit repeating and back with Done', async () => {
+  it('folds down to the heading with the arrow and back', async () => {
     const user = userEvent.setup()
-    setup()
-    await user.click(screen.getByRole('button', { name: 'Edit repeating' }))
-    expect(screen.getByRole('group', { name: 'Days for Long run' })).toBeInTheDocument()
+    const onCollapsedChange = vi.fn<(collapsed: boolean) => void>()
+    setup(mockTodayItems, { onCollapsedChange })
+    const toggle = screen.getByRole('button', { name: /Today’s tasks/ })
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(onCollapsedChange).toHaveBeenLastCalledWith(true)
+    expect(screen.getByRole('heading', { name: /Today’s tasks.*5\/11/ })).toBeInTheDocument()
+    expect(screen.queryByRole('list', { name: 'Tasks' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'All 11' })).toBeNull()
-    await user.click(screen.getAllByRole('button', { name: 'Done' })[0]!)
+    expect(screen.queryByRole('button', { name: 'Edit repeating' })).toBeNull()
+
+    await user.click(toggle)
+    expect(onCollapsedChange).toHaveBeenLastCalledWith(false)
     expect(screen.getByRole('list', { name: 'Tasks' })).toBeInTheDocument()
+  })
+
+  it('can start folded', () => {
+    setup(mockTodayItems, { defaultCollapsed: true })
+    expect(screen.getByRole('button', { name: /Today’s tasks/ })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('list', { name: 'Tasks' })).toBeNull()
+  })
+
+  it('works as tomorrow’s card', () => {
+    setup([], { day: 'tomorrow' })
+    expect(screen.getByRole('heading', { name: /Tomorrow’s tasks.*0\/0/ })).toBeInTheDocument()
+    expect(screen.getByText('Nothing planned for tomorrow. Add a task above.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit repeating' })).toBeNull()
   })
 
   it('shows an empty message', () => {

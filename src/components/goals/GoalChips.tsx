@@ -1,8 +1,9 @@
 import { useRef, type KeyboardEvent } from 'react'
 import { cn } from 'cn'
-import { GOAL_STATUS_META, type GoalStatus } from './meta'
+import { GOAL_STATUS_META, NO_STATUS_META, type GoalStatus } from './meta'
 
-export type GoalChip = { id: string; label: string; status: GoalStatus }
+/** status null = a goal without key results yet. */
+export type GoalChip = { id: string; label: string; status: GoalStatus | null }
 
 type GoalChipsProps = {
   goals: GoalChip[]
@@ -46,7 +47,7 @@ export function GoalChips({ goals, selectedId, onSelect }: GoalChipsProps) {
     >
       {goals.map((goal, i) => {
         const selected = goal.id === selectedId
-        const { label: statusLabel, dot } = GOAL_STATUS_META[goal.status]
+        const { label: statusLabel, dot } = goal.status ? GOAL_STATUS_META[goal.status] : NO_STATUS_META
         return (
           <button
             key={goal.id}
@@ -59,13 +60,13 @@ export function GoalChips({ goals, selectedId, onSelect }: GoalChipsProps) {
             onClick={() => onSelect(goal.id)}
             onKeyDown={onKeyDown}
             className={cn(
-              'inline-flex h-10 shrink-0 items-center gap-2 rounded-lg border px-3.5 text-sm font-semibold whitespace-nowrap',
+              'inline-flex h-10 max-w-64 shrink-0 items-center gap-2 rounded-lg border px-3.5 text-sm font-semibold whitespace-nowrap',
               'focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none',
               selected ? 'border-foreground bg-foreground text-background' : 'border-border bg-card text-foreground hover:bg-muted',
             )}
           >
             <span aria-hidden className={cn('size-2 rounded-full', dot)} />
-            {goal.label}
+            <span className="truncate">{goal.label}</span>
             <span className="sr-only">, {statusLabel}</span>
           </button>
         )

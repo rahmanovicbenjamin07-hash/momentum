@@ -55,6 +55,8 @@ const HEAT_ROWS = [
 ]
 const LEVEL_RATE = [0, 0.4, 0.65, 0.85, 1] as const
 const HEAT_START: DateKey = '2026-08-10'
+/** The day the mock user started: the Consistency grid's first square. */
+export const MOCK_CONSISTENCY_START = HEAT_START
 
 export const mockConsistency: ConsistencyDay[] = HEAT_ROWS.flatMap((row, weekday) =>
   [...row].flatMap((ch, week) => {

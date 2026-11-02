@@ -5,6 +5,7 @@ import { checksRange, deriveTodayView, STREAK_LOOKBACK_DAYS } from './todayData'
 
 const WED = '2026-10-28'
 const TUE = '2026-10-27'
+const THU = '2026-10-29'
 const TZ = 'Europe/Sarajevo'
 const EVERY_DAY = [true, true, true, true, true, true, true]
 const BASE = { user_id: 'u', created_at: '2026-10-01T10:00:00+00:00' }
@@ -40,12 +41,13 @@ function doneDays(itemIds: string[], from: string, to: string): RoutineCheck[] {
 }
 
 describe('checksRange', () => {
-  it('covers the streak lookback and ends today', () => {
-    expect(checksRange(WED, WED)).toEqual({ from: addDays(WED, -(STREAK_LOOKBACK_DAYS - 1)), to: WED })
+  it('covers the streak lookback and ends tomorrow', () => {
+    expect(checksRange(WED, WED)).toEqual({ from: addDays(WED, -(STREAK_LOOKBACK_DAYS - 1)), to: THU })
   })
 
   it('stretches to a viewed day in the future or far past', () => {
     expect(checksRange(WED, '2026-11-03').to).toBe('2026-11-03')
+    expect(checksRange(WED, TUE).to).toBe(THU)
     expect(checksRange(WED, '2025-01-01').from).toBe('2025-01-01')
   })
 })
@@ -71,6 +73,31 @@ describe('deriveTodayView', () => {
     expect(view.items.map((i) => i.id).sort()).toEqual(['read', 't1', 't2', 'wake'])
     expect(view.progress).toMatchObject({ done: 2, total: 4, percent: 50 })
     expect(view.openToday).toBe(2)
+  })
+
+  it('builds tomorrow’s list from routine days and tasks due tomorrow', () => {
+    const v = deriveTodayView({
+      today: WED,
+      selected: WED,
+      timeZone: TZ,
+      routineItems: [...items, routine('wed-only', { days: [false, false, true, false, false, false, false] })],
+      checks,
+      checksFrom: from,
+      tasks: [...tasks, task('plan', THU)],
+    })
+    expect(v.tomorrowItems.map((i) => i.id).sort()).toEqual(['plan', 'read', 'wake'])
+    expect(v.tomorrowItems.every((i) => !i.done)).toBe(true)
+    // Viewing another day doesn't move tomorrow.
+    const other = deriveTodayView({
+      today: WED,
+      selected: TUE,
+      timeZone: TZ,
+      routineItems: items,
+      checks,
+      checksFrom: from,
+      tasks: [task('plan', THU)],
+    })
+    expect(other.tomorrowItems.map((i) => i.id)).toContain('plan')
   })
 
   it('computes the streak with the rest day', () => {

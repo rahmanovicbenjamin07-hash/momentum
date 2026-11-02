@@ -1,4 +1,5 @@
 import type { Priority, Repeat } from '@/schemas/today'
+import { dayIndex, type DateKey } from './dates'
 
 export type ParsedQuickAdd = {
   /** Text with the #tag, !priority and time removed. Can be empty, so validate it. */
@@ -48,9 +49,17 @@ export function parseQuickAdd(text: string): ParsedQuickAdd {
   return { title, tag, priority, time }
 }
 
-/** Mon..Sun for the Repeat select. "Just today" is a one-off task, so no routine days. */
-export function repeatToDays(repeat: Repeat): boolean[] {
+/**
+ * Mon..Sun for the Repeat select. "Just today" is a one-off task, so no routine days.
+ * "Every week" repeats on the weekday of `onDay` (e.g. every Wednesday).
+ */
+export function repeatToDays(repeat: Repeat, onDay?: DateKey): boolean[] {
   switch (repeat) {
+    case 'every_week': {
+      const days = [false, false, false, false, false, false, false]
+      if (onDay) days[dayIndex(onDay)] = true
+      return days
+    }
     case 'every_day':
       return [true, true, true, true, true, true, true]
     case 'weekdays':

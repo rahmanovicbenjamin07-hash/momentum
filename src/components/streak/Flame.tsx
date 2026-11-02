@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { cn } from 'cn'
 import { getStreakLevel, type StreakLevelId } from '@/lib/streak-levels'
 
@@ -40,6 +41,7 @@ export function Flame({ level, size = 96, sparkles, circle = true, label, classN
       height={size}
       className={cn('shrink-0 overflow-visible', className)}
       data-level={level}
+      style={{ '--flame-glow': colors.outer } as CSSProperties}
       {...(label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true })}
     >
       {circle && <circle cx="50" cy="50" r="50" fill={colors.tint} data-part="circle" />}

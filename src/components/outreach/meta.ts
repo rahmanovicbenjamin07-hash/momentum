@@ -25,12 +25,13 @@ export const SOURCE_META: Record<LeadSource, { label: string; icon: LucideIcon; 
 ) as Record<LeadSource, { label: string; icon: LucideIcon; className: string }>
 
 /** Stage labels follow the design ("Meeting booked"). */
-export const STAGE_META: Record<LeadStage, { label: string; className: string }> = {
-  new: { label: 'New', className: 'bg-muted text-ink-2' },
-  contacted: { label: 'Contacted', className: 'bg-info-tint text-info' },
-  replied: { label: 'Replied', className: 'bg-brand-tint text-brand' },
-  meeting: { label: 'Meeting booked', className: 'bg-warn-tint text-warn' },
-  proposal: { label: 'Proposal', className: 'bg-tag-pink-tint text-tag-pink' },
-  won: { label: 'Won', className: 'bg-good-tint text-good' },
-  lost: { label: 'Lost', className: 'bg-bad-tint text-bad' },
+/** `className`: the stage pill; `dot`: a small dot in the stage's colour (stage filter). */
+export const STAGE_META: Record<LeadStage, { label: string; className: string; dot: string }> = {
+  new: { label: 'New', className: 'bg-muted text-ink-2', dot: 'bg-ink-3' },
+  contacted: { label: 'Contacted', className: 'bg-info-tint text-info', dot: 'bg-info' },
+  replied: { label: 'Replied', className: 'bg-brand-tint text-brand', dot: 'bg-chart-2' },
+  meeting: { label: 'Meeting booked', className: 'bg-warn-tint text-warn', dot: 'bg-warn' },
+  proposal: { label: 'Proposal', className: 'bg-tag-pink-tint text-tag-pink', dot: 'bg-tag-pink' },
+  won: { label: 'Won', className: 'bg-good-tint text-good', dot: 'bg-good' },
+  lost: { label: 'Lost', className: 'bg-bad-tint text-bad', dot: 'bg-bad' },
 }

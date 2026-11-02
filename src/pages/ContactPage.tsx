@@ -1,8 +1,8 @@
 import { Loader2 } from 'lucide-react'
-import { useRef } from 'react'
-import { Link, useParams } from 'react-router'
+import { useRef, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
-import { useContact, useSetStage, useUpdateContact } from '@/api/contacts'
+import { useContact, useDeleteContact, useSetStage, useUpdateContact } from '@/api/contacts'
 import { useSaveWonDeal } from '@/api/metrics'
 import { useCreateTask, useContactTasks, useToggleTask } from '@/api/tasks'
 import { useTemplates } from '@/api/templates'
@@ -11,6 +11,7 @@ import { useUserToday } from '@/app/useUserToday'
 import { EmptyState } from '@/components/EmptyState'
 import { ContactLayout } from '@/components/contact/ContactLayout'
 import { ContactBreadcrumb, ContactSummary } from '@/components/contact/ContactSummary'
+import { DeleteLeadDialog } from '@/components/contact/DeleteLeadDialog'
 import { DetailsList } from '@/components/contact/DetailsList'
 import { LinkedTasks } from '@/components/contact/LinkedTasks'
 import { LogTouchForm, type LogTouchFormHandle } from '@/components/contact/LogTouchForm'
@@ -27,6 +28,7 @@ import type { Contact } from '@/schemas/outreach'
 
 export default function ContactPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const { today, timeZone } = useUserToday()
 
   const contact = useContact(id)
@@ -40,7 +42,9 @@ export default function ContactPage() {
   const logTouch = useLogTouch()
   const createTask = useCreateTask()
   const toggleTask = useToggleTask()
+  const deleteContact = useDeleteContact()
 
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const touchForm = useRef<LogTouchFormHandle>(null)
 
   if (contact.isError) {
@@ -111,6 +115,7 @@ export default function ContactPage() {
               )
             }}
             onMarkLost={() => moveTo('lost')}
+            onDelete={() => setDeleteOpen(true)}
           >
             <StageStepper stage={lead.stage} onChange={moveTo} />
             {lead.stage === 'won' && (
@@ -132,6 +137,17 @@ export default function ContactPage() {
               />
             )}
           </ContactSummary>
+          <DeleteLeadDialog
+            open={deleteOpen}
+            onOpenChange={setDeleteOpen}
+            leadName={lead.name}
+            onConfirm={() => {
+              setDeleteOpen(false)
+              // Gone from the lists right away; if the delete fails it comes back with an error toast.
+              deleteContact.mutate(lead.id, { onSuccess: () => toast.success('Lead deleted') })
+              void navigate('/outreach')
+            }}
+          />
         </>
       }
       aside={

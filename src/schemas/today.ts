@@ -43,7 +43,8 @@ export const MISS_REASONS = ['Tired', 'No time', 'Travel', 'Sick', 'Forgot', 'Ot
 export const missReasonSchema = z.enum(MISS_REASONS)
 export type MissReason = z.infer<typeof missReasonSchema>
 
-export const REPEAT_OPTIONS = ['just_today', 'weekdays', 'every_day', 'weekends'] as const
+/** every_week = once a week, on the weekday of the task's day. */
+export const REPEAT_OPTIONS = ['just_today', 'weekdays', 'every_day', 'weekends', 'every_week'] as const
 export const repeatSchema = z.enum(REPEAT_OPTIONS)
 export type Repeat = z.infer<typeof repeatSchema>
 
@@ -165,6 +166,8 @@ export const todayItemSchema = z.object({
   tag: tagSchema.nullable().optional(),
   /** One-off tasks only. */
   priority: prioritySchema.optional(),
+  /** Saved order (routine items and one-off tasks each keep their own); used by "My order". */
+  position: positionSchema.optional(),
 })
 export type TodayItem = z.infer<typeof todayItemSchema>
 export type TodayItemKind = TodayItem['kind']

@@ -55,8 +55,11 @@ const DEFAULTS: Record<string, Row> = {
   },
   touches: { template_id: null, body: null, got_reply: false },
   templates: { channel: null },
-  goals: { include_pipeline: false, unit: null, start_value: 0 },
+  objectives: { why: null },
+  goals: { include_pipeline: false, unit: null, start_value: 0, kind: 'number', completed_on: null },
   goal_updates: { note: null },
+  goal_milestones: { due_date: null, done_on: null, position: 0 },
+  objective_checkins: { note: null },
   reviews: { wins: '', misses: '', lesson: '', focus: '', status: 'draft' },
   lessons: { area: 'Other' },
   experiments: { hypothesis: '', status: 'running', before_value: null, during_value: null, result: '' },
@@ -65,8 +68,16 @@ const DEFAULTS: Record<string, Row> = {
   notifications: { body: '', link: null, read_at: null },
 }
 
-/** Mirrors the touches trigger: a sent/received touch updates the contact's last_touch_at. */
+/** Mirrors finance_entries.amount_eur, a generated column (1 € = 1.95583 KM). */
+function generatedColumns(table: string, row: Row) {
+  if (table !== 'finance_entries') return
+  const amount = Number(row.amount)
+  row.amount_eur = Math.round((row.currency === 'bam' ? amount / 1.95583 : amount) * 100) / 100
+}
+
+/** After an insert: generated columns, and the touches trigger (a sent/received touch updates the contact's last_touch_at). */
 function afterInsert(db: MockDb, table: string, row: Row) {
+  generatedColumns(table, row)
   if (table !== 'touches' || row.direction === 'note') return
   const contact = db.contacts?.find((c) => c.id === row.contact_id)
   if (contact && (!contact.last_touch_at || String(row.occurred_at) > String(contact.last_touch_at))) {
@@ -109,7 +120,7 @@ function matches(row: Row, column: string, filter: string): boolean {
   }
 }
 
-const RESERVED = new Set(['select', 'order', 'on_conflict', 'limit', 'columns'])
+const RESERVED = new Set(['select', 'order', 'on_conflict', 'limit', 'offset', 'columns'])
 
 function filterRows(rows: Row[], params: URLSearchParams): Row[] {
   let result = rows
@@ -117,7 +128,9 @@ function filterRows(rows: Row[], params: URLSearchParams): Row[] {
     if (RESERVED.has(column)) continue
     result = result.filter((row) => matches(row, column, value))
   }
-  return result
+  // .range(from, to) sends offset (and limit, which stays ignored): skip the earlier pages.
+  const offset = Number(params.get('offset') ?? 0)
+  return offset > 0 ? result.slice(offset) : result
 }
 
 function respond(route: Route, status: number, body?: unknown) {
@@ -270,6 +283,7 @@ export async function mockSupabase(
         const targets = filterRows(rows, params)
         for (const row of targets) {
           Object.assign(row, patch)
+          generatedColumns(table, row)
           // Mirrors the tasks trigger: completed_at follows status.
           if (table === 'tasks' && 'status' in patch) {
             row.completed_at = patch.status === 'done' ? nowIso() : null

@@ -1,6 +1,7 @@
 /**
- * Settings → Data: the nightly backups in Storage, restoring one, and deleting the account.
- * The real work happens in the Edge Functions 'restore' and 'delete-account'.
+ * Settings → Data: the nightly backups in Storage, restoring one, resetting all data and
+ * deleting the account. Restore and delete run in the Edge Functions 'restore' and
+ * 'delete-account'; reset calls the SQL function restore_user_data directly.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -107,6 +108,30 @@ export function useRestoreBackup() {
     },
     onSuccess: () => queryClient.invalidateQueries(),
     onError: () => toast.error("Couldn't restore the backup. Your data was not changed."),
+  })
+}
+
+/**
+ * "Reset everything": deletes all the user's tasks, routine, contacts, metrics, goals,
+ * notes and reviews, as if they had just signed up. The account, profile settings,
+ * notification settings and saved backups stay. Uses restore_user_data with no rows
+ * (one transaction, runs as the user so RLS applies), handing back only the
+ * notification settings. Every cached query is cleared afterwards.
+ */
+export function useResetAllData() {
+  const queryClient = useQueryClient()
+  const { user } = useAuth()
+  return useMutation({
+    mutationFn: async () => {
+      const userId = requireUserId(user?.id)
+      const prefs = await supabase.from('notification_prefs').select('*').eq('user_id', userId)
+      if (prefs.error) throw prefs.error
+      const { error } = await supabase.rpc('restore_user_data', { p_tables: { notification_prefs: prefs.data } })
+      if (error) throw error
+    },
+    // reset, not invalidate: lists show empty straight away instead of the old rows.
+    onSuccess: () => queryClient.resetQueries(),
+    onError: () => toast.error("Couldn't reset your data. Nothing was deleted."),
   })
 }
 

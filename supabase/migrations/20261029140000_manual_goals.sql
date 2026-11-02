@@ -1,34 +1,49 @@
 -- Manual goals: any goal you like ("Have €10,000 saved by 3 May 2027"), with a
 -- starting point, its own unit (€, KM, count…), and updates you type in yourself.
 -- Existing goals (linked to a metric or routine item) keep working unchanged.
+--
+-- Safe to run again: part of it was once applied by hand to the live database
+-- (without being recorded), so every step skips or replaces what's already there.
 
 -- ===========================================================================
 -- goals: new columns and a third source kind
 -- ===========================================================================
 
 -- What a goal is measured on: 'manual' = numbers you enter yourself (goal_updates).
-alter table public.goals drop constraint goals_source_kind_check;
+alter table public.goals drop constraint if exists goals_source_kind_check;
 alter table public.goals
   add constraint goals_source_kind_check check (source_kind in ('metric', 'routine', 'manual'));
 
 -- Manual goals have no metric or routine item behind them.
 alter table public.goals alter column source_id drop not null;
+alter table public.goals drop constraint if exists goals_source_id_matches_kind;
 alter table public.goals
   add constraint goals_source_id_matches_kind check ((source_kind = 'manual') = (source_id is null));
 
 -- Unit of a manual goal (linked goals take the unit of their metric). bam = Bosnian convertible mark (KM).
 alter table public.goals
-  add column unit text check (unit in ('eur', 'bam', 'count', 'hours', 'km', 'days'));
+  add column if not exists unit text check (unit in ('eur', 'bam', 'count', 'hours', 'km', 'days'));
+alter table public.goals drop constraint if exists goals_manual_has_unit;
 alter table public.goals
   add constraint goals_manual_has_unit check (source_kind <> 'manual' or unit is not null);
 
 -- Where the goal starts, e.g. €3,000 already saved. 0 for existing goals.
 alter table public.goals
-  add column start_value numeric(14, 2) not null default 0
+  add column if not exists start_value numeric(14, 2) not null default 0
   check (start_value >= 0 and start_value < 100000000);
 
 -- Lets goal_updates point at (goal id, owner) so an update can only belong to its goal's owner.
-alter table public.goals add constraint goals_id_user_id_key unique (id, user_id);
+-- (Added only if missing: goal_updates may already depend on it, so it can't be dropped.)
+do $$
+begin
+  if not exists (
+    select 1 from pg_catalog.pg_constraint
+     where conname = 'goals_id_user_id_key' and conrelid = 'public.goals'::regclass
+  ) then
+    alter table public.goals add constraint goals_id_user_id_key unique (id, user_id);
+  end if;
+end;
+$$;
 
 comment on column public.goals.unit is 'Manual goals only: eur, bam (KM), count, hours, km, days.';
 comment on column public.goals.start_value is 'Value at start_date, e.g. money already saved.';
@@ -36,7 +51,7 @@ comment on column public.goals.start_value is 'Value at start_date, e.g. money a
 -- ===========================================================================
 -- goal_updates: "on this day the goal stood at <value>" (one per goal per day)
 -- ===========================================================================
-create table public.goal_updates (
+create table if not exists public.goal_updates (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users on delete cascade,
   created_at timestamptz not null default now(),
@@ -54,9 +69,14 @@ create table public.goal_updates (
 
 comment on table public.goal_updates is 'Values typed in by hand for manual goals, at most one per goal per day.';
 
-create index goal_updates_user_id_idx on public.goal_updates (user_id);
+create index if not exists goal_updates_user_id_idx on public.goal_updates (user_id);
 
 alter table public.goal_updates enable row level security;
+
+drop policy if exists "goal_updates_select_own" on public.goal_updates;
+drop policy if exists "goal_updates_insert_own" on public.goal_updates;
+drop policy if exists "goal_updates_update_own" on public.goal_updates;
+drop policy if exists "goal_updates_delete_own" on public.goal_updates;
 
 create policy "goal_updates_select_own" on public.goal_updates
   for select to authenticated

@@ -75,6 +75,11 @@ describe('repeatToDays', () => {
     expect(repeatToDays('just_today')).toEqual([false, false, false, false, false, false, false])
   })
 
+  it('every week: only the weekday of the given day (28 Oct 2026 is a Wednesday)', () => {
+    expect(repeatToDays('every_week', '2026-10-28')).toEqual([false, false, true, false, false, false, false])
+    expect(repeatToDays('every_week', '2026-11-01')).toEqual([false, false, false, false, false, false, true])
+  })
+
   it('returns a new array each time', () => {
     const a = repeatToDays('weekdays')
     a[0] = false

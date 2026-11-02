@@ -18,7 +18,7 @@ export function StreakCard({ days }: StreakCardProps) {
     <section
       aria-label="Current streak"
       data-level={level.id}
-      className="flex h-full items-center gap-4 rounded-xl border border-border bg-card p-5"
+      className="flame-hover flex h-full items-center gap-4 rounded-xl border border-border bg-card p-5"
     >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">

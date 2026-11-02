@@ -86,7 +86,6 @@ describe('MetricChart', () => {
 
     await user.click(screen.getByRole('button', { name: 'Per month' }))
     expect(screen.getByRole('button', { name: 'Per month' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByText(/Per month — each bar/)).toBeInTheDocument()
     expect(legend.getByText('Goal pace')).toBeInTheDocument()
 
     const table = screen.getByRole('table', { name: 'Money earned 2026, by month' })

@@ -7,6 +7,7 @@ import {
   mockCompletion,
   mockCompletionWithGaps,
   mockConsistency,
+  MOCK_CONSISTENCY_START,
   mockFunnel,
   mockKpis,
   mockReplyRates,
@@ -98,16 +99,29 @@ describe('CompletionLineChart', () => {
 })
 
 describe('ConsistencyHeatmap', () => {
-  it('draws 12 weeks up to today with a label on every square, and a legend', () => {
-    render(<ConsistencyHeatmap days={mockConsistency} today={MOCK_STATS_TODAY} insight="Tuesdays are best." />)
-    const grid = within(screen.getByRole('group', { name: /last 12 weeks, Monday to Sunday/ }))
-    // 11 full weeks + Mon–Wed of this week.
+  it('fills from the start day up to today, with a label on every square, and a legend', () => {
+    render(
+      <ConsistencyHeatmap days={mockConsistency} today={MOCK_STATS_TODAY} start={MOCK_CONSISTENCY_START} insight="Tuesdays are best." />,
+    )
+    const grid = within(screen.getByRole('group', { name: /day 80 of 84/ }))
+    // 11 full weeks + Mon–Wed of this week; the 4 squares after today stay empty.
     expect(grid.getAllByRole('img')).toHaveLength(80)
+    expect(screen.getByText('Day 80 of 84')).toBeInTheDocument()
     expect(grid.getByRole('img', { name: 'Mon, 10 Aug: 65% done' })).toBeInTheDocument()
     expect(grid.getByRole('img', { name: 'Wed, 28 Oct: 65% done' })).toHaveClass('ring-2')
     expect(screen.getByText('Less')).toBeInTheDocument()
     expect(screen.getByText('More')).toBeInTheDocument()
     expect(screen.getByText('Tuesdays are best.')).toBeInTheDocument()
+  })
+
+  it('starts on the first square for someone new, and labels rows from that weekday', () => {
+    render(<ConsistencyHeatmap days={[]} today="2026-11-04" start="2026-11-04" />)
+    const grid = within(screen.getByRole('group', { name: /day 1 of 84/ }))
+    expect(grid.getAllByRole('img')).toHaveLength(1)
+    expect(grid.getByRole('img', { name: 'Wed, 4 Nov: nothing planned' })).toHaveClass('ring-2')
+    expect(screen.getAllByText(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/).map((el) => el.textContent)).toEqual([
+      'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Mon', 'Tue',
+    ])
   })
 
   it('buckets rates into five steps', () => {

@@ -1,13 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { FileSpreadsheet, Loader2, Users } from 'lucide-react'
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useId, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
-import { useBackups, useDeleteAccount, useRestoreBackup } from '@/api/backups'
+import { useBackups, useDeleteAccount, useResetAllData, useRestoreBackup } from '@/api/backups'
 import { useMetrics } from '@/api/metrics'
 import { useProfile } from '@/api/profile'
-import { useRoutineItems } from '@/api/routine'
-import { useNotificationPrefs, useSetNotificationPref, useUpdateProfileSettings } from '@/api/settings'
+import { useUpdateProfileSettings } from '@/api/settings'
 import { useAuth } from '@/app/auth-context'
 import { exportCsv, exportEverything, insertMetricValues, type CsvExportKind } from '@/app/dataExport'
 import { setTheme } from '@/app/theme'
@@ -16,79 +15,41 @@ import { useUserToday } from '@/app/useUserToday'
 import { CsvImportDialog } from '@/components/outreach/CsvImportDialog'
 import { AppearanceSettings } from '@/components/settings/AppearanceSettings'
 import { DataSettings } from '@/components/settings/DataSettings'
+import { DateTimeSettings } from '@/components/settings/DateTimeSettings'
 import { IntegrationsSettings } from '@/components/settings/IntegrationsSettings'
-import { NotificationsSettings, type NotificationRowData } from '@/components/settings/NotificationsSettings'
+import { isSettingsSection, SETTINGS_PANEL_ID, settingsTabId, type SettingsSection } from '@/components/settings/meta'
+import { NotificationsComingSoon } from '@/components/settings/NotificationsComingSoon'
 import { SettingsHeader } from '@/components/settings/SettingsHeader'
 import { SettingsTabs } from '@/components/settings/SettingsTabs'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { parseMetricValuesCsv, type MetricValueRow } from '@/lib/exportData'
 import type { CsvLineError } from '@/lib/csv'
-import { formatDays } from '@/lib/todayList'
-import type { DayEndHour, NotificationKey, NotificationPref, Theme, WeekStart } from '@/schemas/settings'
+import type { DayEndHour, Theme, WeekStart } from '@/schemas/settings'
 import { LoadError, Loading } from './stats/shared'
-
-/** What each reminder starts as before it's ever been changed (design/settings.png). */
-const DEFAULT_PREFS: Record<string, { enabled: boolean; time: string | null; time_end?: string | null }> = {
-  master: { enabled: true, time: null },
-  anytime: { enabled: true, time: '09:00' },
-  followups: { enabled: true, time: '09:00' },
-  close_day: { enabled: true, time: '21:00' },
-  weekly_review: { enabled: true, time: '18:00' },
-  email_summary: { enabled: false, time: '07:00' },
-  quiet_hours: { enabled: true, time: '22:00', time_end: '06:00' },
-}
-const FIXED_ROWS = ['anytime', 'followups', 'close_day', 'weekly_review', 'email_summary'] as const
 
 const isTheme = (v: unknown): v is Theme => v === 'light' || v === 'dark' || v === 'system'
 
-/** Settings (design/settings.png): notifications, appearance, data & backups, integrations. */
+/** Settings: one tab at a time (appearance, date & time, notifications, data & backups, integrations). */
 export default function SettingsPage() {
   const { user } = useAuth()
   const { today } = useUserToday()
   const navigate = useNavigate()
+  const [params, setParams] = useSearchParams()
   const profile = useProfile(user?.id)
-  const prefs = useNotificationPrefs()
-  const routine = useRoutineItems()
   const backups = useBackups()
-  const setPref = useSetNotificationPref()
   const updateSettings = useUpdateProfileSettings()
   const restore = useRestoreBackup()
+  const resetAll = useResetAllData()
   const deleteAccount = useDeleteAccount()
   const contactsImport = useContactsCsvImport()
   const [importChoiceOpen, setImportChoiceOpen] = useState(false)
   const [metricImportOpen, setMetricImportOpen] = useState(false)
 
-  // A routine reminder is created the first time the page sees the item: its own time, or 09:00 for "anytime" items.
-  const created = useRef(new Set<string>())
-  useEffect(() => {
-    if (!prefs.data || !routine.data) return
-    const have = new Set(prefs.data.map((p) => p.key))
-    for (const item of routine.data) {
-      const key = `routine:${item.id}` as const
-      if (have.has(key) || created.current.has(key)) continue
-      created.current.add(key)
-      setPref.mutate({ key, enabled: true, time: item.time ? item.time.slice(0, 5) : '09:00' })
-    }
-  }, [prefs.data, routine.data, setPref])
-
-  const prefByKey = useMemo(() => new Map((prefs.data ?? []).map((p) => [p.key, p])), [prefs.data])
-  const pref = (key: NotificationKey): Pick<NotificationPref, 'enabled' | 'time' | 'time_end'> => {
-    const saved = prefByKey.get(key)
-    if (saved) return saved
-    const fallback = DEFAULT_PREFS[key] ?? { enabled: true, time: '09:00' }
-    return { enabled: fallback.enabled, time: fallback.time, time_end: fallback.time_end ?? null }
-  }
-
-  const rows: NotificationRowData[] = [
-    ...(routine.data ?? []).map((item) => {
-      const key = `routine:${item.id}` as const
-      const p = pref(key)
-      return { key, title: item.title, daysLabel: formatDays(item.days), enabled: p.enabled, time: p.time ?? (item.time?.slice(0, 5) ?? '09:00') }
-    }),
-    ...FIXED_ROWS.map((key) => ({ key, enabled: pref(key).enabled, time: pref(key).time })),
-  ]
-  const quiet = pref('quiet_hours')
+  // The open tab lives in the address (?tab=data), so a reload or a shared link opens the same tab.
+  const tabParam = params.get('tab')
+  const tab: SettingsSection = isSettingsSection(tabParam) ? tabParam : 'appearance'
+  const selectTab = (next: SettingsSection) => setParams(next === 'appearance' ? {} : { tab: next }, { replace: true })
 
   const p = profile.data
   const theme: Theme = isTheme(p?.theme) ? p.theme : 'light'
@@ -105,42 +66,31 @@ export default function SettingsPage() {
     }
   }
 
-  const loading = profile.isPending || prefs.isPending || routine.isPending
-  const failed = profile.isError || prefs.isError || routine.isError
-
-  return (
-    <>
-      <SettingsHeader />
-      <SettingsTabs />
-      {failed ? (
-        <LoadError
-          title="Couldn't load your settings"
-          onRetry={() => {
-            void profile.refetch()
-            void prefs.refetch()
-            void routine.refetch()
-          }}
-        />
-      ) : loading ? (
-        <Loading label="Loading your settings…" />
-      ) : (
-        <div className="flex flex-col gap-5">
-          <NotificationsSettings
-            master={pref('master').enabled}
-            rows={rows}
-            quietHours={{ enabled: quiet.enabled, start: quiet.time, end: quiet.time_end ?? null }}
-            onChange={(change) => setPref.mutate(change)}
-          />
+  function panel() {
+    switch (tab) {
+      case 'appearance':
+        return (
           <AppearanceSettings
             theme={theme}
-            weekStart={weekStart}
-            dayEndHour={dayEndHour}
-            language="en"
             onChange={(change) => {
-              if (change.theme) setTheme(change.theme)
+              setTheme(change.theme)
               updateSettings.mutate(change)
             }}
           />
+        )
+      case 'datetime':
+        return (
+          <DateTimeSettings
+            weekStart={weekStart}
+            dayEndHour={dayEndHour}
+            language="en"
+            onChange={(change) => updateSettings.mutate(change)}
+          />
+        )
+      case 'notifications':
+        return <NotificationsComingSoon />
+      case 'data':
+        return (
           <DataSettings
             backupEnabled={p?.backup_enabled ?? false}
             backups={(backups.data ?? []).map((b) => ({
@@ -162,6 +112,14 @@ export default function SettingsPage() {
               }
               toast.success('Backup restored')
             }}
+            onResetAll={async () => {
+              try {
+                await resetAll.mutateAsync()
+              } catch (error) {
+                throw new Error("Couldn't reset your data. Nothing was deleted.", { cause: error })
+              }
+              toast.success('Everything was reset. Fresh start!')
+            }}
             onDeleteAccount={async () => {
               try {
                 await deleteAccount.mutateAsync()
@@ -172,9 +130,25 @@ export default function SettingsPage() {
               toast('Your account was deleted')
             }}
           />
-          <IntegrationsSettings />
-        </div>
-      )}
+        )
+      case 'integrations':
+        return <IntegrationsSettings />
+    }
+  }
+
+  return (
+    <>
+      <SettingsHeader />
+      <SettingsTabs active={tab} onSelect={selectTab} />
+      <div role="tabpanel" id={SETTINGS_PANEL_ID} aria-labelledby={settingsTabId(tab)}>
+        {profile.isError ? (
+          <LoadError title="Couldn't load your settings" onRetry={() => void profile.refetch()} />
+        ) : profile.isPending ? (
+          <Loading label="Loading your settings…" />
+        ) : (
+          panel()
+        )}
+      </div>
 
       <ImportChoiceDialog
         open={importChoiceOpen}

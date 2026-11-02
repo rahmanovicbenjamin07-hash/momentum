@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { DeleteAccountDialog } from './DeleteAccountDialog'
 import { sectionClass, settingsSectionId } from './meta'
+import { ResetDataDialog } from './ResetDataDialog'
 import { RestoreDialog } from './RestoreDialog'
 import { ToggleSwitch } from './ToggleSwitch'
 
@@ -29,6 +30,8 @@ type DataSettingsProps = {
   onToggleBackup: (enabled: boolean) => void
   /** Throw an Error to show its message in the dialog. */
   onRestore: (path: string) => Promise<void> | void
+  /** "Reset everything" (after typing RESET). Throw an Error to show its message in the dialog. */
+  onResetAll: () => Promise<void> | void
   /** Throw an Error to show its message in the dialog. */
   onDeleteAccount: () => Promise<void> | void
 }
@@ -39,7 +42,7 @@ const EXPORT_TABLES: { value: ExportTable; label: string }[] = [
   { value: 'metric_values', label: 'Metric values' },
 ]
 
-/** "Data & backups" card: exports, import, daily backups with Restore, and Delete account. */
+/** "Data & backups" card: exports, import, daily backups with Restore, Reset everything and Delete account. */
 export function DataSettings({
   backupEnabled,
   backups,
@@ -48,11 +51,13 @@ export function DataSettings({
   onImportCsv,
   onToggleBackup,
   onRestore,
+  onResetAll,
   onDeleteAccount,
 }: DataSettingsProps) {
   const id = useId()
   const [restoring, setRestoring] = useState<Backup | null>(null)
   const [restoreOpen, setRestoreOpen] = useState(false)
+  const [resetOpen, setResetOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
 
   return (
@@ -134,6 +139,24 @@ export function DataSettings({
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-t border-border pt-5">
         <div className="min-w-0 flex-1 basis-64">
+          <p className="text-sm font-semibold text-bad">Reset everything</p>
+          <p className="text-xs text-ink-2">
+            Start from the beginning: deletes all tasks, contacts, metrics and goals but keeps your account and settings.
+            You’ll type RESET to confirm.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="lg"
+          className="border-bad bg-card text-bad hover:bg-bad-tint hover:text-bad"
+          onClick={() => setResetOpen(true)}
+        >
+          Reset everything
+        </Button>
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-t border-border pt-5">
+        <div className="min-w-0 flex-1 basis-64">
           <p className="text-sm font-semibold text-bad">Delete account</p>
           <p className="text-xs text-ink-2">
             Removes all tasks, contacts, metrics and goals for good. You’ll type DELETE to confirm.
@@ -155,6 +178,7 @@ export function DataSettings({
         label={restoring?.label ?? ''}
         onConfirm={() => (restoring ? onRestore(restoring.path) : undefined)}
       />
+      <ResetDataDialog open={resetOpen} onOpenChange={setResetOpen} onExportJson={onExportJson} onConfirm={onResetAll} />
       <DeleteAccountDialog open={deleteOpen} onOpenChange={setDeleteOpen} onConfirm={onDeleteAccount} />
     </section>
   )

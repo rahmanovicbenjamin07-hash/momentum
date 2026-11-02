@@ -37,29 +37,27 @@ describe('completionFetchRange', () => {
 })
 
 describe('buildKpis', () => {
-  const current: PeriodTotals = { done: 75, total: 100, tasksCompleted: 142, sent: 96, replies: 18, meetings: 7 }
-  const previous: PeriodTotals = { done: 69, total: 100, tasksCompleted: 131, sent: 82, replies: 13, meetings: 5 }
+  const current: PeriodTotals = { done: 75, total: 100, tasksCompleted: 142, sent: 96 }
+  const previous: PeriodTotals = { done: 69, total: 100, tasksCompleted: 131, sent: 82 }
 
-  it('formats the six cards like the design', () => {
+  it('formats the four cards', () => {
     const kpis = buildKpis(current, previous, 30, { current: 12, best: 21 })
     expect(kpis.map((k) => [k.label, k.value, k.change?.text ?? k.note])).toEqual([
       ['Task completion', '75%', '+6 pts'],
       ['Tasks completed', '142', '+11 vs prior 30 days'],
       ['Current streak', '12 days', 'Best 21 days'],
       ['Outreach sent', '96', '+14 vs prior 30 days'],
-      ['Reply rate', '18.8%', '+2.9 pts'],
-      ['Meetings booked', '7', '+2'],
     ])
     expect(kpis[0]?.change?.direction).toBe('up')
   })
 
   it('handles drops and empty periods', () => {
-    const empty: PeriodTotals = { done: 0, total: 0, tasksCompleted: 0, sent: 0, replies: 0, meetings: 0 }
+    const empty: PeriodTotals = { done: 0, total: 0, tasksCompleted: 0, sent: 0 }
     const kpis = buildKpis(empty, current, 7, { current: 1, best: 1 })
     expect(kpis[0]).toMatchObject({ value: '—', change: undefined })
     expect(kpis[1]?.change).toEqual({ text: '−142 vs prior 7 days', direction: 'down' })
     expect(kpis[2]).toMatchObject({ value: '1 day', note: 'Best 1 day' })
-    expect(kpis[4]).toMatchObject({ value: '—', change: undefined })
+    expect(kpis[3]).toMatchObject({ value: '0' })
   })
 })
 

@@ -10,11 +10,15 @@ import type { RoutineCheck, RoutineItem, Task, TodayItem } from '@/schemas/today
  */
 export const STREAK_LOOKBACK_DAYS = 180
 
-/** The one date range of routine checks the page loads: streak history + the week + the day being viewed. */
+/**
+ * The one date range of routine checks the page loads: streak history + the week + the day
+ * being viewed + tomorrow (for the "Tomorrow's tasks" card).
+ */
 export function checksRange(today: DateKey, selected: DateKey, weekStartsOn: WeekStartsOn = 1): { from: DateKey; to: DateKey } {
   const candidates = [addDays(today, -(STREAK_LOOKBACK_DAYS - 1)), weekStart(today, weekStartsOn), selected]
   const from = candidates.reduce((min, d) => (d < min ? d : min))
-  const to = selected > today ? selected : today
+  const tomorrow = addDays(today, 1)
+  const to = selected > tomorrow ? selected : tomorrow
   return { from, to }
 }
 
@@ -30,13 +34,15 @@ export type TodayViewInput = {
   /** Checks covering checksRange(today, selected). */
   checks: readonly RoutineCheck[]
   checksFrom: DateKey
-  /** Tasks for the viewed day and this week; duplicates are fine. */
+  /** Tasks for the viewed day, this week and tomorrow; duplicates are fine. */
   tasks: readonly Task[]
 }
 
 export type TodayView = {
   /** Items for the viewed day. */
   items: TodayItem[]
+  /** Items for the day after the real today ("Tomorrow's tasks"). */
+  tomorrowItems: TodayItem[]
   /** All active routine items (for Edit repeating). */
   routineItems: RoutineItem[]
   progress: TodayProgress
@@ -59,6 +65,7 @@ export function deriveTodayView(input: TodayViewInput): TodayView {
 
   const items = buildTodayItems(routineItems, checks, tasks, selected, timeZone)
   const todayItems = selected === today ? items : buildTodayItems(routineItems, checks, tasks, today, timeZone)
+  const tomorrowItems = buildTodayItems(routineItems, checks, tasks, addDays(today, 1), timeZone)
 
   const streakItems = routineItems.map((item) => ({
     id: item.id,
@@ -74,6 +81,7 @@ export function deriveTodayView(input: TodayViewInput): TodayView {
 
   return {
     items,
+    tomorrowItems,
     routineItems: [...routineItems],
     progress: todayProgress(items),
     openToday: todayItems.filter((item) => !item.done).length,

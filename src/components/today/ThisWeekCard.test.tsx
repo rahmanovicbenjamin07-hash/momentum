@@ -7,7 +7,7 @@ import { ThisWeekCard } from './ThisWeekCard'
 function setup() {
   render(
     <MemoryRouter>
-      <ThisWeekCard week={mockWeekProgress} outreach={{ sent: 11, goal: 20 }} />
+      <ThisWeekCard week={mockWeekProgress} />
     </MemoryRouter>,
   )
 }
@@ -19,7 +19,7 @@ describe('ThisWeekCard', () => {
     expect(screen.getByText('Week progress · Mon–Wed')).toBeInTheDocument()
     expect(screen.getByText('17/24')).toBeInTheDocument()
     expect(screen.getByText('12/14')).toBeInTheDocument()
-    expect(screen.getByText('11/20')).toBeInTheDocument()
+    expect(screen.queryByText('Outreaches')).toBeNull()
     expect(screen.getByRole('link', { name: 'Stats' })).toHaveAttribute('href', '/stats')
   })
 

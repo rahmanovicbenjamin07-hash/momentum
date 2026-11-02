@@ -6,7 +6,7 @@ import type { GoalSeries, OpenDeal } from '@/api/goals'
 import type { MetricRow } from '@/api/metrics'
 import type { PipelineDeal } from '@/components/goals/meta'
 import type { GoalStatusRow } from '@/components/reports/GoalStatuses'
-import { addDays, daysBetween, formatDate, type DateKey } from '@/lib/dates'
+import { addDays, daysBetween, formatDate, weekDays, type DateKey, type WeekStartsOn } from '@/lib/dates'
 import {
   goalStatus,
   levelForecast,
@@ -16,11 +16,25 @@ import {
   type GoalStatus,
 } from '@/lib/forecast'
 import { buildGoalChart, forecastSentence, formatGoalValue, neededSentence, type GoalChart } from '@/lib/goalChart'
-import type { Goal, GoalUnit } from '@/schemas/goals'
+import {
+  doneProgress,
+  habitProgress,
+  milestoneProgress,
+  numberPercent,
+  objectiveProgress,
+  type HabitProgress,
+  type MilestoneProgress,
+} from '@/lib/keyResults'
+import type { Goal, GoalKind, GoalUnit, Milestone, Objective } from '@/schemas/goals'
 import type { RoutineItem } from '@/schemas/today'
 
-/** What a goal is measured on, with its name and unit (routine goals count days, manual goals have their own unit). */
+/** What a key result is measured on, with its name and unit (routine goals count days, manual goals have their own unit). */
 export function goalSource(goal: Goal, metrics: readonly MetricRow[], routine: readonly RoutineItem[]): { name: string; unit: GoalUnit } {
+  if (goal.kind === 'milestones' || goal.kind === 'done') return { name: '', unit: 'count' }
+  if (goal.kind === 'habit') {
+    if (goal.source_kind === 'manual') return { name: 'Ticked by hand', unit: 'days' }
+    return { name: routine.find((r) => r.id === goal.source_id)?.title ?? 'Removed routine item', unit: 'days' }
+  }
   if (goal.source_kind === 'manual') return { name: 'Updated by hand', unit: goal.unit ?? 'count' }
   if (goal.source_kind === 'metric') {
     const metric = metrics.find((m) => m.id === goal.source_id)
@@ -205,17 +219,173 @@ const REPORT_STATUS: Record<GoalStatus, Pick<GoalStatusRow, 'status' | 'label'>>
   off_track: { status: 'off-track' },
 }
 
-/** Rows for the Reports tab's "Goals" card. */
+
+// ===========================================================================
+// Key results of every kind, and the objective they belong to
+// ===========================================================================
+
+/** One key result as its card shows it. */
+export type KeyResultSummary = {
+  id: string
+  title: string
+  kind: GoalKind
+  /** 0–100. */
+  percent: number
+  status: GoalStatus
+  /** "€4,200 of €10,000", "3 of 5 steps done", "6 of 12 weeks hit · 3-week streak", "Done on 12 Oct 2026". */
+  progress: string
+  /** "STEPS · deadline 31 Dec 2026", "HABIT · Ticked by hand · 3× a week · until 31 Mar 2027". */
+  line: string
+  habit?: HabitProgress
+  milestones?: MilestoneProgress<Milestone>
+}
+
+export type KeyResultInput = GoalViewInput & { weekStartsOn?: WeekStartsOn }
+
+const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`
+
+/** Percent, status and the two lines of text for any kind of key result. */
+export function keyResultSummary({ goal, series, source, today, pipeline, weekStartsOn = 1 }: KeyResultInput): KeyResultSummary {
+  const base = { id: goal.id, title: goal.title, kind: goal.kind }
+  const deadline = formatDate(goal.deadline)
+
+  switch (goal.kind) {
+    case 'milestones': {
+      const steps = milestoneProgress({ milestones: series.milestones ?? [], startDate: goal.start_date, deadline: goal.deadline, today })
+      return {
+        ...base,
+        percent: steps.percent,
+        status: steps.status,
+        progress: `${steps.done} of ${plural(steps.total, 'step')} done${steps.overdue ? ` · ${steps.overdue} overdue` : ''}`,
+        line: `STEPS · deadline ${deadline}`,
+        milestones: steps,
+      }
+    }
+    case 'habit': {
+      const habit = habitProgress({
+        perWeek: goal.target,
+        startDate: goal.start_date,
+        deadline: goal.deadline,
+        today,
+        doneDates: series.habit?.doneDates ?? [],
+        weekStartsOn,
+      })
+      return {
+        ...base,
+        percent: habit.percent,
+        status: habit.status,
+        progress: `${habit.weeksHit} of ${plural(habit.totalWeeks, 'week')} hit${habit.streak > 1 ? ` · ${habit.streak}-week streak` : ''}`,
+        line: `HABIT · ${source.name} · ${goal.target}× a week · until ${deadline}`,
+        habit,
+      }
+    }
+    case 'done': {
+      const done = doneProgress({ completedOn: goal.completed_on, deadline: goal.deadline, today })
+      const left = daysBetween(today, goal.deadline)
+      return {
+        ...base,
+        ...done,
+        progress: goal.completed_on
+          ? `Done on ${formatDate(goal.completed_on)}`
+          : left < 0
+            ? `Not done · the deadline was ${deadline}`
+            : `Not done yet · ${plural(left, 'day')} left`,
+        line: `DONE / NOT DONE · deadline ${deadline}`,
+      }
+    }
+    case 'number': {
+      const view = goalView({ goal, series, source, today, pipeline })
+      return {
+        ...base,
+        percent: numberPercent({
+          type: goal.type,
+          current: series.current,
+          startValue: goal.start_value,
+          target: goal.target,
+        }),
+        status: view.status,
+        progress: view.progress,
+        line: view.sourceLine,
+      }
+    }
+  }
+}
+
+/** The key results of one objective, oldest first (`goals` is already in that order). */
+export function keyResultsOf(objectiveId: string, goals: readonly Goal[]): Goal[] {
+  return goals.filter((g) => (g.objective_id ?? g.id) === objectiveId)
+}
+
+export type ObjectiveSummary = {
+  id: string
+  title: string
+  why: string | null
+  percent: number
+  /** null without key results. */
+  status: GoalStatus | null
+  /** "3 KEY RESULTS · BY 3 MAY 2027" (the latest deadline). */
+  line: string
+}
+
+export function objectiveSummary(
+  objective: Objective,
+  keyResults: readonly { goal: Goal; summary: KeyResultSummary }[],
+): ObjectiveSummary {
+  const { percent, status } = objectiveProgress(keyResults.map((kr) => kr.summary))
+  const latest = keyResults.map((kr) => kr.goal.deadline).sort().at(-1)
+  return {
+    id: objective.id,
+    title: objective.title,
+    why: objective.why,
+    percent,
+    status,
+    line: latest
+      ? `${plural(keyResults.length, 'KEY RESULT', 'KEY RESULTS')} · BY ${formatDate(latest).toUpperCase()}`
+      : 'NO KEY RESULTS YET',
+  }
+}
+
+/** Rows for the Reports tab's "Goals" card: one per objective that has key results. */
 export function reportGoalRows(
+  objectives: readonly Objective[],
   goals: readonly Goal[],
   series: ReadonlyMap<string, GoalSeries>,
   sourceOf: (goal: Goal) => { name: string; unit: GoalUnit },
   today: DateKey,
   pipeline: number,
+  weekStartsOn: WeekStartsOn = 1,
 ): GoalStatusRow[] {
-  return goals.map((goal) => {
-    const s = series.get(goal.id) ?? { months: [], current: 0 }
-    const { status } = goalView({ goal, series: s, source: sourceOf(goal), today, pipeline })
-    return { id: goal.id, title: goal.title, ...REPORT_STATUS[status] }
+  return objectives.flatMap((objective) => {
+    const keyResults = keyResultsOf(objective.id, goals).map((goal) => ({
+      goal,
+      summary: keyResultSummary({
+        goal,
+        series: series.get(goal.id) ?? { months: [], current: 0 },
+        source: sourceOf(goal),
+        today,
+        pipeline,
+        weekStartsOn,
+      }),
+    }))
+    const { status } = objectiveSummary(objective, keyResults)
+    return status ? [{ id: objective.id, title: objective.title, ...REPORT_STATUS[status] }] : []
   })
+}
+
+const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
+
+/** This week's days for a habit: done or not, and disabled in the future or outside the habit's dates. */
+export function habitWeekDays(
+  goal: Pick<Goal, 'start_date' | 'deadline'>,
+  doneDates: readonly DateKey[],
+  today: DateKey,
+  weekStartsOn: WeekStartsOn = 1,
+): { date: DateKey; weekday: string; done: boolean; disabled: boolean }[] {
+  const done = new Set(doneDates)
+  return weekDays(today, weekStartsOn).map((date) => ({
+    date,
+    weekday: WEEKDAY_NAMES[new Date(`${date}T12:00:00Z`).getUTCDay()] ?? '',
+    done: done.has(date),
+    disabled: date > today || date < goal.start_date || date > goal.deadline,
+  }))
 }

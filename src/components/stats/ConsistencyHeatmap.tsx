@@ -1,7 +1,8 @@
 import { format, parseISO } from 'date-fns'
 import { useId, useState, type ReactNode } from 'react'
 import { cn } from 'cn'
-import { addDays, weekStart, type DateKey } from '@/lib/dates'
+import { consistencyCycle } from '@/lib/consistency'
+import { addDays, type DateKey } from '@/lib/dates'
 import { CHART, heatLevel, percent } from './chartTheme'
 
 export type ConsistencyDay = {
@@ -13,13 +14,13 @@ export type ConsistencyDay = {
 type ConsistencyHeatmapProps = {
   days: readonly ConsistencyDay[]
   today: DateKey
-  /** Number of weeks (columns). Default 12. */
+  /** The day you started (first square). Later rounds start again from the first square. */
+  start: DateKey
+  /** Number of weeks (columns). Default 12, so one round is 84 days. */
   weeks?: number
   /** Shown under the grid, e.g. "<strong>Insight:</strong> Tuesdays are your strongest day…". */
   insight?: ReactNode
 }
-
-const ROW_LABELS = ['Mon', '', 'Wed', '', 'Fri', '', 'Sun'] as const
 
 function cellLabel(date: DateKey, rate: number | null | undefined): string {
   const day = format(parseISO(date), 'EEE, d MMM')
@@ -27,13 +28,21 @@ function cellLabel(date: DateKey, rate: number | null | undefined): string {
   return `${day}: ${percent(rate)} done`
 }
 
-/** "Consistency": one square per day for the last 12 weeks (columns = weeks, rows = Mon–Sun). */
-export function ConsistencyHeatmap({ days, today, weeks = 12, insight }: ConsistencyHeatmapProps) {
+/**
+ * "Consistency": one square per day, filled from the first square on the day you start,
+ * column by column (7 days each). After the last square it starts again from the first.
+ * Squares still to come show empty, so the grid always fills the card.
+ */
+export function ConsistencyHeatmap({ days, today, start, weeks = 12, insight }: ConsistencyHeatmapProps) {
   const id = useId()
   const [hover, setHover] = useState<{ label: string; col: number; row: number } | null>(null)
   const byDate = new Map(days.map((d) => [d.date, d.rate]))
-  const start = addDays(weekStart(today), -(weeks - 1) * 7)
-  const columns = Array.from({ length: weeks }, (_, w) => Array.from({ length: 7 }, (__, d) => addDays(start, w * 7 + d)))
+  const length = weeks * 7
+  const cycle = consistencyCycle(start, today, length)
+  const columns = Array.from({ length: weeks }, (_, w) => Array.from({ length: 7 }, (__, d) => addDays(cycle.from, w * 7 + d)))
+  // A round is a whole number of weeks, so each row is always the same weekday.
+  const rowLabels = columns[0]!.map((date) => format(parseISO(date), 'EEE'))
+  const range = `${format(parseISO(cycle.from), 'd MMM')} – ${format(parseISO(cycle.to), 'd MMM yyyy')}`
 
   return (
     <section aria-labelledby={`${id}-title`} className="rounded-xl border border-border bg-card p-5">
@@ -41,24 +50,28 @@ export function ConsistencyHeatmap({ days, today, weeks = 12, insight }: Consist
         <h2 id={`${id}-title`} className="text-base font-semibold text-foreground">
           Consistency
         </h2>
-        <span className="text-[13px] text-ink-2">Last {weeks} weeks</span>
+        <span className="text-[13px] text-ink-2 tabular-nums" title={range}>
+          Day {cycle.day} of {length}
+        </span>
       </div>
 
-      <div className="relative max-w-[400px]">
+      <div className="relative">
         <div
           role="group"
-          aria-label={`Days done, last ${weeks} weeks, Monday to Sunday`}
+          aria-label={`Days done, day ${cycle.day} of ${length}, ${range}`}
           className="grid gap-1"
           style={{ gridTemplateColumns: `auto repeat(${weeks}, minmax(0, 1fr))`, gridAutoFlow: 'column', gridTemplateRows: 'repeat(7, auto)' }}
         >
-          {ROW_LABELS.map((label, row) => (
+          {rowLabels.map((label, row) => (
             <span key={row} aria-hidden="true" className="flex items-center pr-1.5 text-[11px] leading-none text-ink-2">
               {label}
             </span>
           ))}
           {columns.map((week, col) =>
             week.map((date, row) => {
-              if (date > today) return <span key={date} aria-hidden="true" className="aspect-square" />
+              if (date > today) {
+                return <span key={date} aria-hidden="true" className="aspect-square rounded-[4px] opacity-50" style={{ background: CHART.heat[0] }} />
+              }
               const rate = byDate.get(date)
               const label = cellLabel(date, rate)
               return (

@@ -14,7 +14,7 @@ function renderAt(path: string, props: Parameters<typeof Sidebar>[0] = {}) {
 describe('Sidebar', () => {
   it('shows all main links', () => {
     renderAt('/')
-    for (const name of ['Today', 'Outreach', 'Stats', 'Goals', 'Improvements', 'Settings']) {
+    for (const name of ['Today', 'Outreach', 'Stats', 'Goals', 'Finance', 'Settings']) {
       expect(screen.getByRole('link', { name: new RegExp(`^${name}`) })).toBeInTheDocument()
     }
   })

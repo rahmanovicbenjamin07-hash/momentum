@@ -1,65 +1,65 @@
-import { useEffect, useState, type MouseEvent } from 'react'
+import { useRef, type KeyboardEvent } from 'react'
 import { cn } from 'cn'
-import { SETTINGS_SECTIONS, settingsSectionId, type SettingsSection } from './meta'
+import { SETTINGS_PANEL_ID, SETTINGS_SECTIONS, settingsTabId, type SettingsSection } from './meta'
+
+type SettingsTabsProps = {
+  active: SettingsSection
+  onSelect: (section: SettingsSection) => void
+}
 
 /**
- * Notifications / Appearance / Data & backups / Integrations.
- * Links to the section cards on the same page: a click scrolls there, and the
- * underline follows whichever section is on screen while you scroll.
+ * Appearance / Date & time / Notifications / Data & backups / Integrations.
+ * Real tabs: only the picked section is shown below. Arrow keys, Home and End move between them.
  */
-export function SettingsTabs() {
-  const [active, setActive] = useState<SettingsSection>('notifications')
+export function SettingsTabs({ active, onSelect }: SettingsTabsProps) {
+  const refs = useRef(new Map<SettingsSection, HTMLButtonElement>())
 
-  useEffect(() => {
-    if (typeof IntersectionObserver === 'undefined') return
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const top = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0]
-        const key = top && SETTINGS_SECTIONS.find((s) => settingsSectionId(s.key) === top.target.id)?.key
-        if (key) setActive(key)
-      },
-      // A section counts as "current" while it crosses the upper part of the screen.
-      { rootMargin: '0px 0px -60% 0px' },
-    )
-    for (const section of SETTINGS_SECTIONS) {
-      const el = document.getElementById(settingsSectionId(section.key))
-      if (el) observer.observe(el)
-    }
-    return () => observer.disconnect()
-  }, [])
-
-  const go = (event: MouseEvent, section: SettingsSection) => {
-    const el = document.getElementById(settingsSectionId(section))
-    if (!el) return
+  const onKeyDown = (event: KeyboardEvent) => {
+    const index = SETTINGS_SECTIONS.findIndex((s) => s.key === active)
+    const last = SETTINGS_SECTIONS.length - 1
+    const next =
+      event.key === 'ArrowRight' ? (index === last ? 0 : index + 1)
+      : event.key === 'ArrowLeft' ? (index === 0 ? last : index - 1)
+      : event.key === 'Home' ? 0
+      : event.key === 'End' ? last
+      : null
+    const key = next === null ? undefined : SETTINGS_SECTIONS[next]?.key
+    if (!key) return
     event.preventDefault()
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
-    // Move keyboard focus too, so Tab continues inside that section.
-    el.focus({ preventScroll: true })
-    setActive(section)
+    onSelect(key)
+    refs.current.get(key)?.focus()
   }
 
   return (
-    <nav aria-label="Settings sections" className="-mx-1 mb-5 overflow-x-auto border-b border-border">
-      <ul className="flex min-w-max gap-1 px-1">
-        {SETTINGS_SECTIONS.map((section) => (
-          <li key={section.key}>
-            <a
-              href={`#${settingsSectionId(section.key)}`}
-              onClick={(event) => go(event, section.key)}
-              aria-current={active === section.key ? 'true' : undefined}
+    <div className="-mx-1 mb-5 overflow-x-auto shadow-[inset_0_-1px_0_var(--border)]">
+      <div role="tablist" aria-label="Settings sections" className="flex min-w-max gap-1 px-1">
+        {SETTINGS_SECTIONS.map((section) => {
+          const selected = active === section.key
+          return (
+            <button
+              key={section.key}
+              ref={(el) => {
+                if (el) refs.current.set(section.key, el)
+                else refs.current.delete(section.key)
+              }}
+              type="button"
+              role="tab"
+              id={settingsTabId(section.key)}
+              aria-selected={selected}
+              aria-controls={SETTINGS_PANEL_ID}
+              tabIndex={selected ? 0 : -1}
+              onClick={() => onSelect(section.key)}
+              onKeyDown={onKeyDown}
               className={cn(
-                '-mb-px inline-flex h-11 items-center border-b-2 px-3.5 text-sm font-medium whitespace-nowrap outline-none focus-visible:rounded-t-lg focus-visible:ring-3 focus-visible:ring-ring/50',
-                active === section.key ? 'border-brand text-brand' : 'border-transparent text-ink-2 hover:text-foreground',
+                'inline-flex h-11 items-center border-b-2 px-3.5 text-sm font-medium whitespace-nowrap outline-none focus-visible:rounded-t-lg focus-visible:ring-3 focus-visible:ring-ring/50',
+                selected ? 'border-brand text-brand' : 'border-transparent text-ink-2 hover:text-foreground',
               )}
             >
               {section.label}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </nav>
+            </button>
+          )
+        })}
+      </div>
+    </div>
   )
 }

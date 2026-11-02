@@ -16,9 +16,9 @@ const today = ['today'] as const
 const outreach = ['outreach'] as const
 const stats = ['stats'] as const
 const goals = ['goals'] as const
-const improve = ['improve'] as const
 const settings = ['settings'] as const
 const notifications = ['notifications'] as const
+const finance = ['finance'] as const
 
 /** Filters for the contacts list. Only server-side filters belong here; keep it a plain, serialisable object. */
 export type ContactFilters = {
@@ -85,26 +85,24 @@ export const queryKeys = {
     all: goals,
     goals: () => [...goals, 'list'] as const,
     goalSeries: (goalId: string) => [...goals, 'series', goalId] as const,
+    /** Objectives: the goals in words; their key results are in goals(). */
+    objectives: () => [...goals, 'objectives'] as const,
     /** Open deals with a value (contacts in contacted → proposal), for "include pipeline". */
     openDeals: () => [...goals, 'openDeals'] as const,
     // Prefix: every goal's series.
     goalSeriesAll: () => [...goals, 'series'] as const,
-  },
-  /** Improvements page. */
-  improve: {
-    all: improve,
-    reviews: () => [...improve, 'reviews'] as const,
-    /** weekStart = Monday of the week, 'yyyy-MM-dd'. */
-    review: (weekStart: IsoDate) => [...improve, 'review', weekStart] as const,
-    lessons: () => [...improve, 'lessons'] as const,
-    experiments: () => [...improve, 'experiments'] as const,
-    ideas: () => [...improve, 'ideas'] as const,
   },
   /** Settings page (profile settings use queryKeys.profile). */
   settings: {
     all: settings,
     notificationPrefs: () => [...settings, 'notificationPrefs'] as const,
     backups: () => [...settings, 'backups'] as const,
+  },
+  /** Finance page: every money entry (newest first) and the starting savings. */
+  finance: {
+    all: finance,
+    entries: () => [...finance, 'entries'] as const,
+    settings: () => [...finance, 'settings'] as const,
   },
   /** The bell. Polled every minute. */
   notifications: {

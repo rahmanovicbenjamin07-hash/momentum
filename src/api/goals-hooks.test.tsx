@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { AuthContext } from '@/app/auth-context'
 import type { Goal } from '@/schemas/goals'
-import { useGoalSeries } from './goals'
+import { keyResultRow, useGoalSeries } from './goals'
 
 // --- fake Supabase: every query is recorded; `db.respond` decides the result ---
 type Call = { table: string; ops: [string, unknown[]][] }
@@ -58,6 +58,9 @@ function goal(fields: Partial<Goal>): Goal {
   return {
     id: '5d6e7f80-9a1b-4c2d-8e3f-4a5b6c7d8e9f',
     user_id: USER_ID,
+    objective_id: '5d6e7f80-9a1b-4c2d-8e3f-4a5b6c7d8e9f',
+    kind: 'number',
+    completed_on: null,
     title: 'Goal',
     short_label: 'Goal',
     type: 'total',
@@ -144,5 +147,67 @@ describe('useGoalSeries', () => {
     expect(data?.manual?.lastUpdate).toBe('2026-02-10')
     expect(db.calls.map((c) => c.table)).toEqual(['goal_updates'])
     expect(db.calls[0]?.ops).toContainEqual(['eq', ['goal_id', 'g-manual']])
+  })
+})
+
+describe('other key result kinds', () => {
+  it('a habit ticked by hand reads its ticks; one linked to a routine item reads routine ticks up to the deadline', async () => {
+    db.calls = []
+    db.respond = (call) =>
+      call.table === 'goal_updates'
+        ? {
+            data: [{ id: 't1', user_id: USER_ID, goal_id: 'g-habit', date: '2026-01-05', value: 1, note: null, created_at: '2026-01-05T10:00:00+00:00' }],
+            error: null,
+          }
+        : { data: [{ date: '2026-01-02' }, { date: '2026-01-03' }], error: null }
+    const { wrapper } = setup()
+    const manual = renderHook(() => useGoalSeries(goal({ id: 'g-habit', kind: 'habit', source_kind: 'manual', source_id: null, target: 3 })), { wrapper })
+    await waitFor(() => expect(manual.result.current.isSuccess).toBe(true))
+    expect(manual.result.current.data?.habit?.doneDates).toEqual(['2026-01-05'])
+    expect(manual.result.current.data?.current).toBe(1)
+
+    const linked = renderHook(() => useGoalSeries(goal({ id: 'g-habit-r', kind: 'habit', source_kind: 'routine', target: 3, deadline: '2026-01-31' })), { wrapper })
+    await waitFor(() => expect(linked.result.current.isSuccess).toBe(true))
+    expect(linked.result.current.data?.habit?.doneDates).toEqual(['2026-01-02', '2026-01-03'])
+    expect(db.calls.find((c) => c.table === 'routine_checks')?.ops).toContainEqual(['lte', ['date', '2026-01-31']])
+  })
+
+  it('steps come in position order; done / not done reads nothing', async () => {
+    db.calls = []
+    const step = (id: string, position: number, done_on: string | null) => ({
+      id, user_id: USER_ID, goal_id: 'g-steps', title: id, due_date: null, done_on, position, created_at: '2026-01-01T10:00:00+00:00',
+    })
+    db.respond = () => ({ data: [step('b', 1, null), step('a', 0, '2026-01-04')], error: null })
+    const { wrapper } = setup()
+    const steps = renderHook(() => useGoalSeries(goal({ id: 'g-steps', kind: 'milestones', source_kind: 'manual', source_id: null, target: 1 })), { wrapper })
+    await waitFor(() => expect(steps.result.current.isSuccess).toBe(true))
+    expect(steps.result.current.data?.milestones?.map((m) => m.id)).toEqual(['a', 'b'])
+    expect(steps.result.current.data?.current).toBe(1)
+
+    db.calls = []
+    const done = renderHook(() => useGoalSeries(goal({ id: 'g-done', kind: 'done', source_kind: 'manual', source_id: null, target: 1, completed_on: '2026-02-01' })), { wrapper })
+    await waitFor(() => expect(done.result.current.isSuccess).toBe(true))
+    expect(done.result.current.data).toEqual({ months: [], current: 1 })
+    expect(db.calls).toEqual([])
+  })
+})
+
+describe('keyResultRow', () => {
+  const base = { id: 'kr', user_id: USER_ID, created_at: '2026-10-28T10:00:00+00:00' }
+  const dates = { start_date: '2026-10-28', deadline: '2027-05-03' }
+
+  it('stores each kind in the shared columns', () => {
+    expect(keyResultRow({ kind: 'number', title: '€10,000 saved', unit: 'eur', start_value: 3000, target: 10000, ...dates }, 'obj', base)).toMatchObject({
+      objective_id: 'obj', kind: 'number', source_kind: 'manual', unit: 'eur', start_value: 3000, target: 10000, short_label: '€10,000 saved',
+    })
+    expect(keyResultRow({ kind: 'habit', title: 'Gym', per_week: 3, routine_item_id: 'r1', ...dates }, 'obj', base)).toMatchObject({
+      kind: 'habit', source_kind: 'routine', source_id: 'r1', target: 3, unit: null,
+    })
+    expect(keyResultRow({ kind: 'habit', title: 'Gym', per_week: 3, routine_item_id: null, ...dates }, 'obj', base)).toMatchObject({
+      source_kind: 'manual', source_id: null, target: 3,
+    })
+    expect(keyResultRow({ kind: 'done', title: 'Get the driving licence', ...dates }, 'obj', base)).toMatchObject({
+      kind: 'done', source_kind: 'manual', target: 1, completed_on: null, short_label: 'Get the driving licence',
+    })
   })
 })

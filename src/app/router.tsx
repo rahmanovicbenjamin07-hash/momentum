@@ -1,18 +1,16 @@
 import { lazy } from 'react'
 import { createBrowserRouter, Navigate, Outlet, type RouteObject } from 'react-router'
+import FinancePage from '@/pages/FinancePage'
 import GoalsPage from '@/pages/GoalsPage'
-import ImprovePage from '@/pages/ImprovePage'
 import LoginPage from '@/pages/LoginPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import ContactPage from '@/pages/ContactPage'
 import OutreachPage from '@/pages/OutreachPage'
 import SettingsPage from '@/pages/SettingsPage'
 import StatsPage from '@/pages/StatsPage'
-import MetricsTab from '@/pages/stats/MetricsTab'
 import OverviewTab from '@/pages/stats/OverviewTab'
-import ReportsTab from '@/pages/stats/ReportsTab'
-import RoutineTab from '@/pages/stats/RoutineTab'
 import TodayPage from '@/pages/TodayPage'
+import WeekPage from '@/pages/WeekPage'
 import AppLayout from './AppLayout'
 import { AuthProvider } from './AuthProvider'
 import RequireAuth from './RequireAuth'
@@ -40,6 +38,7 @@ export const routes: RouteObject[] = [
             element: <AppLayout />,
             children: [
               { index: true, element: <TodayPage /> },
+              { path: 'week', element: <WeekPage /> },
               { path: 'outreach', element: <OutreachPage /> },
               { path: 'outreach/:id', element: <ContactPage /> },
               {
@@ -48,13 +47,14 @@ export const routes: RouteObject[] = [
                 children: [
                   { index: true, element: <Navigate to="overview" replace /> },
                   { path: 'overview', element: <OverviewTab /> },
-                  { path: 'metrics', element: <MetricsTab /> },
-                  { path: 'routine', element: <RoutineTab /> },
-                  { path: 'reports', element: <ReportsTab /> },
+                  // My metrics, Routine progress and Reports were removed (their data is kept); old links land on Overview.
+                  { path: '*', element: <Navigate to="/stats/overview" replace /> },
                 ],
               },
               { path: 'goals', element: <GoalsPage /> },
-              { path: 'improve', element: <ImprovePage /> },
+              { path: 'finance', element: <FinancePage /> },
+              // Improvements was removed (its data is kept); old links, e.g. weekly-review notifications, open Today.
+              { path: 'improve', element: <Navigate to="/" replace /> },
               { path: 'settings', element: <SettingsPage /> },
               { path: '*', element: <NotFoundPage /> },
             ],

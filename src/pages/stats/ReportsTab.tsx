@@ -2,7 +2,7 @@ import { Loader2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useContacts } from '@/api/contacts'
-import { useGoals, useGoalsSeries, useOpenDeals } from '@/api/goals'
+import { useGoals, useGoalsSeries, useObjectives, useOpenDeals } from '@/api/goals'
 import { useMetrics } from '@/api/metrics'
 import { useRoutineItems } from '@/api/routine'
 import { useOutreachFunnel, useReplyRates, useRoutineDays, useTasksByTag } from '@/api/stats'
@@ -44,6 +44,7 @@ export default function ReportsTab() {
   const routineDays = useRoutineDays(ranges.previous.from, today)
   const metrics = useMetrics()
   const entries = useAllMetricEntries([ranges.year - 1, ranges.year])
+  const objectives = useObjectives()
   const goals = useGoals()
   const goalSeries = useGoalsSeries(goals.data)
   const openDeals = useOpenDeals()
@@ -98,11 +99,18 @@ export default function ReportsTab() {
 
   // Each goal's status now (real pace). Undefined while loading: the card shows its placeholder.
   const goalRows = useMemo(() => {
-    if (!goals.data || !goalSeries.data || !metrics.data || !routineItems.data || !openDeals.data) return undefined
+    if (!objectives.data || !goals.data || !goalSeries.data || !metrics.data || !routineItems.data || !openDeals.data) return undefined
     const m = metrics.data
     const r = routineItems.data
-    return reportGoalRows(goals.data, goalSeries.data, (goal) => goalSource(goal, m, r), today, pipelineDeals(openDeals.data).total)
-  }, [goals.data, goalSeries.data, metrics.data, routineItems.data, openDeals.data, today])
+    return reportGoalRows(
+      objectives.data,
+      goals.data,
+      goalSeries.data,
+      (goal) => goalSource(goal, m, r),
+      today,
+      pipelineDeals(openDeals.data).total,
+    )
+  }, [objectives.data, goals.data, goalSeries.data, metrics.data, routineItems.data, openDeals.data, today])
 
   async function share() {
     if (!report) return
@@ -130,10 +138,10 @@ export default function ReportsTab() {
               yearLabel={ranges.yearLabel}
               onChange={(value) => setPeriod(value === 'year' ? 'year' : null)}
             />
-            <Button variant="outline" className="bg-card print:hidden" disabled={!report} onClick={() => window.print()}>
+            <Button variant="outline" className="glass-button print:hidden" disabled={!report} onClick={() => window.print()}>
               Download PDF
             </Button>
-            <Button className="print:hidden" disabled={!report || sharing} onClick={() => void share()}>
+            <Button className="glass-button glass-button-primary print:hidden" disabled={!report || sharing} onClick={() => void share()}>
               {sharing && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
               Share image
             </Button>

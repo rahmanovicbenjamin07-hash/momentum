@@ -158,7 +158,7 @@ export default function OutreachPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="glass-page flex flex-col gap-4">
       {header}
 
       {adding && (
@@ -234,7 +234,7 @@ export default function OutreachPage() {
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
-                    className="bg-card"
+                    className="glass-button"
                     disabled={currentPage === 1}
                     onClick={() => setParam({ page: String(currentPage - 1) })}
                   >
@@ -242,7 +242,7 @@ export default function OutreachPage() {
                   </Button>
                   <Button
                     variant="outline"
-                    className="bg-card"
+                    className="glass-button"
                     disabled={currentPage === pageCount}
                     onClick={() => setParam({ page: String(currentPage + 1) })}
                   >

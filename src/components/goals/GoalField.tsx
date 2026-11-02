@@ -1,25 +1,40 @@
 import type { ReactNode } from 'react'
 import { Label } from '@/components/ui/label'
 
-/** Label + control + optional hint and error, wired up with ids. Used by the goal forms. */
+/**
+ * Label + control + optional hint and error, wired up with ids. Used by the goal forms.
+ * `floating`: the label sits inside the field like a placeholder and moves up small once
+ * there's a value (see index.css → .float-field). Text inputs then need placeholder=" ".
+ */
 export function GoalField({
   id,
   label,
   hint,
   error,
+  floating = false,
   children,
 }: {
   id: string
   label: string
   hint?: ReactNode
   error?: string
+  floating?: boolean
   children: (describedBy: string | undefined) => ReactNode
 }) {
   const describedBy = [hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(' ') || undefined
   return (
     <div className="grid gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      {children(describedBy)}
+      {floating ? (
+        <div className="float-field relative">
+          {children(describedBy)}
+          <Label htmlFor={id}>{label}</Label>
+        </div>
+      ) : (
+        <>
+          <Label htmlFor={id}>{label}</Label>
+          {children(describedBy)}
+        </>
+      )}
       {hint && (
         <p id={`${id}-hint`} className="text-xs text-ink-2">
           {hint}
@@ -33,6 +48,3 @@ export function GoalField({
     </div>
   )
 }
-
-export const goalSelectClass =
-  'h-10 w-full rounded-lg border border-input bg-card px-3 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-bad'

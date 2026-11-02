@@ -52,7 +52,7 @@ export function OutreachHeader({
       title="Outreach"
       actions={
         <>
-          <div role="group" aria-label="View" className="flex rounded-lg border border-border bg-muted p-1">
+          <div role="group" aria-label="View" className="glass-input flex h-10 border p-1">
             {VIEWS.map(({ value, label }) => {
               const selected = view === value
               return (
@@ -62,8 +62,10 @@ export function OutreachHeader({
                   aria-pressed={selected}
                   onClick={() => onViewChange(value)}
                   className={cn(
-                    'h-8 rounded-md px-3 text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
-                    selected ? 'bg-card text-foreground' : 'text-ink-2 hover:text-foreground',
+                    'h-full rounded-lg px-3 text-sm font-medium outline-none transition-[background-color,box-shadow] duration-200 focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none',
+                    selected
+                      ? 'bg-white text-foreground shadow-[0_1px_2px_rgb(17_24_39/0.08),0_2px_8px_rgb(17_24_39/0.06)] dark:bg-white/10 dark:shadow-none'
+                      : 'text-ink-2 hover:text-foreground',
                   )}
                 >
                   {label}
@@ -71,18 +73,18 @@ export function OutreachHeader({
               )
             })}
           </div>
-          <Button variant="outline" className="bg-card" onClick={onTemplates}>
+          <Button variant="outline" className="glass-button" onClick={onTemplates}>
             Templates
           </Button>
-          <Button variant="outline" className="bg-card" onClick={onImportCsv}>
+          <Button variant="outline" className="glass-button" onClick={onImportCsv}>
             Import CSV
           </Button>
           {onExportCsv && (
-            <Button variant="outline" className="bg-card" onClick={onExportCsv}>
+            <Button variant="outline" className="glass-button" onClick={onExportCsv}>
               Export CSV
             </Button>
           )}
-          <Button onClick={onAddLead}>
+          <Button className="glass-button glass-button-primary" onClick={onAddLead}>
             <Plus aria-hidden="true" />
             Add lead
           </Button>

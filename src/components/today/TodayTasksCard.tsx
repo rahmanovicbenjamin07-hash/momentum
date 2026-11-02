@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react'
+import { ChevronDown, CircleDot, RefreshCw, type LucideIcon } from 'lucide-react'
+import { useId, useRef, useState } from 'react'
 import { cn } from 'cn'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,46 +14,64 @@ import {
 import { Progress } from '@/components/ui/progress'
 import { countTodayItems, filterTodayItems, percentDone, sortTodayItems, type TodayFilter } from '@/lib/today-list'
 import type { TodayItem } from '@/schemas/today'
-import { RoutineEditor, type RoutineEditorHandlers, type RoutineEditorItem } from './RoutineEditor'
 import { TaskRow } from './TaskRow'
 
-type TodayTasksCardProps = RoutineEditorHandlers & {
-  /** Everything scheduled today: routine items and one-off tasks. Sorted here. */
+type TodayTasksCardProps = {
+  /** Which day the card is for; sets the title and texts. Default 'today'. */
+  day?: TaskDay
+  /** Everything scheduled that day: routine items and one-off tasks. Sorted here. */
   items: readonly TodayItem[]
-  /** All routine items (also days they aren't scheduled), for "Edit repeating". */
-  routineItems: readonly RoutineEditorItem[]
   onToggle: (item: TodayItem, done: boolean) => void
   /**
    * Trash button on a one-off task: delete it straight away (the page offers Undo).
    * Repeating items ask first, then go through `onRemove`. Left out = no trash buttons.
    */
   onDeleteTask?: (item: TodayItem) => void
+  /** Removes a repeating item from the routine, after "Remove from your routine?". */
+  onRemove: (id: string) => void
+  /** Start folded up: only the heading and its arrow show. */
+  defaultCollapsed?: boolean
+  /** Called when the arrow folds or unfolds the card (the page remembers it). */
+  onCollapsedChange?: (collapsed: boolean) => void
 }
 
-const FILTERS: { value: TodayFilter; label: string }[] = [
+type TaskDay = 'today' | 'tomorrow'
+
+const DAY_WORDS: Record<TaskDay, { title: string; progress: string; list: string }> = {
+  today: { title: 'Today’s tasks', progress: 'Today’s progress', list: 'Tasks' },
+  tomorrow: { title: 'Tomorrow’s tasks', progress: 'Tomorrow’s progress', list: 'Tomorrow’s tasks' },
+}
+
+/** Round pills: "All" shows its word, the other two only an icon (the name is in aria-label and the tooltip). */
+const FILTERS: { value: TodayFilter; label: string; icon?: LucideIcon }[] = [
   { value: 'all', label: 'All' },
-  { value: 'routine', label: 'Repeating' },
-  { value: 'task', label: 'One-off' },
+  { value: 'routine', label: 'Repeating', icon: RefreshCw },
+  { value: 'task', label: 'One-off', icon: CircleDot },
 ]
 
-const EMPTY_TEXT: Record<TodayFilter, string> = {
-  all: 'Nothing planned for today. Add a task above.',
-  routine: 'No repeating tasks today.',
-  task: 'No one-off tasks today.',
+function emptyText(filter: TodayFilter, day: TaskDay): string {
+  if (filter === 'routine') return `No repeating tasks ${day}.`
+  if (filter === 'task') return `No one-off tasks ${day}.`
+  return `Nothing planned for ${day}. Add a task above.`
 }
 
-/** "Today's tasks": one list for repeating and one-off items, with filters, progress and an edit mode. */
+/**
+ * "Today's tasks" (or tomorrow's): one list for repeating and one-off items, with filters,
+ * and progress. The arrow by the title folds the card down to its heading.
+ */
 export function TodayTasksCard({
+  day = 'today',
   items,
-  routineItems,
   onToggle,
-  onChangeDays,
-  onChangeTime,
   onRemove,
   onDeleteTask,
+  defaultCollapsed = false,
+  onCollapsedChange,
 }: TodayTasksCardProps) {
+  const id = useId()
+  const words = DAY_WORDS[day]
+  const [collapsed, setCollapsed] = useState(defaultCollapsed)
   const [filter, setFilter] = useState<TodayFilter>('all')
-  const [editing, setEditing] = useState(false)
   /** The repeating item waiting for "Remove from your routine?". */
   const [confirming, setConfirming] = useState<TodayItem | null>(null)
   const pendingRemove = useRef<string | null>(null)
@@ -71,72 +90,105 @@ export function TodayTasksCard({
   const visible = sortTodayItems(filterTodayItems(items, filter))
   const percent = percentDone(counts.done, counts.all)
 
+  function toggleCollapsed() {
+    setCollapsed(!collapsed)
+    onCollapsedChange?.(!collapsed)
+  }
+
   return (
-    <section aria-labelledby="today-tasks-title" className="overflow-hidden rounded-xl border border-border bg-card">
-      <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-4 pb-3">
-        <div className="min-w-0">
-          <h2 id="today-tasks-title" className="text-base font-semibold text-foreground">
-            Today’s tasks{' '}
-            <span className="text-sm font-normal text-ink-2">
-              <span className="sr-only">, done </span>
-              {counts.done}/{counts.all}
+    <section aria-labelledby={`${id}-title`} className="overflow-hidden rounded-xl border border-border bg-card">
+      <div
+        className={cn(
+          'flex flex-wrap items-center justify-between gap-3 px-4 pt-4 transition-[padding] duration-300 ease-out motion-reduce:transition-none',
+          collapsed ? 'pb-4' : 'pb-3',
+        )}
+      >
+        <h2 id={`${id}-title`} className="min-w-0 text-base font-semibold text-foreground">
+          <button
+            type="button"
+            aria-expanded={!collapsed}
+            aria-controls={`${id}-body`}
+            onClick={toggleCollapsed}
+            className="-mx-1 flex items-center gap-1.5 rounded-lg px-1 text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            <ChevronDown
+              aria-hidden="true"
+              className={cn(
+                'size-4 shrink-0 text-ink-2 transition-transform duration-300 ease-out motion-reduce:transition-none',
+                collapsed && '-rotate-90',
+              )}
+            />
+            <span>
+              {words.title}{' '}
+              <span className="text-sm font-normal text-ink-2">
+                <span className="sr-only">, done </span>
+                {counts.done}/{counts.all}
+              </span>
             </span>
-          </h2>
-          <p className="text-[13px] text-ink-2">Repeating tasks come back on their days · one-off tasks roll over if unfinished</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {!editing && (
+          </button>
+        </h2>
+        {!collapsed && (
+          <div className="flex flex-wrap items-center gap-2 duration-300 ease-out animate-in fade-in-0 motion-reduce:animate-none">
             <div role="group" aria-label="Show" className="flex flex-wrap gap-2">
-              {FILTERS.map(({ value, label }) => {
+              {FILTERS.map(({ value, label, icon: Icon }) => {
                 const selected = filter === value
                 return (
                   <button
                     key={value}
                     type="button"
                     aria-pressed={selected}
+                    aria-label={`${label} ${counts[value]}`}
+                    title={label}
                     onClick={() => setFilter(value)}
                     className={cn(
-                      'h-8 rounded-lg border px-3 text-[13px] font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
+                      'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
                       selected
                         ? 'border-brand bg-brand-tint text-brand'
                         : 'border-border bg-card text-foreground hover:bg-muted',
                     )}
                   >
-                    {label} <span className={selected ? 'text-brand' : 'text-ink-3'}>{counts[value]}</span>
+                    {Icon ? <Icon className="size-3.5 shrink-0" aria-hidden="true" /> : label}
+                    <span className={cn('tabular-nums', selected ? 'text-brand' : 'text-ink-3')}>{counts[value]}</span>
                   </button>
                 )
               })}
             </div>
-          )}
-          <Button variant="outline" size="sm" className="h-8 bg-card px-3 text-[13px]" onClick={() => setEditing(!editing)}>
-            {editing ? 'Done' : 'Edit repeating'}
-          </Button>
-        </div>
+          </div>
+        )}
       </div>
 
-      <Progress
-        value={percent}
-        aria-label={`Today’s progress: ${percent}%`}
-        className="h-1 rounded-none bg-brand-tint"
-      />
+      {/*
+        Folds by animating the row height (0fr ↔ 1fr). While folded the body is inert and
+        aria-hidden, and turns invisible once the animation ends, so it's out of the Tab
+        order and screen readers just like `hidden` was.
+      */}
+      <div
+        id={`${id}-body`}
+        inert={collapsed}
+        aria-hidden={collapsed || undefined}
+        className={cn(
+          'grid transition-[grid-template-rows,visibility] duration-300 ease-out motion-reduce:transition-none',
+          collapsed ? 'invisible grid-rows-[0fr]' : 'visible grid-rows-[1fr]',
+        )}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <Progress
+            value={percent}
+            aria-label={`${words.progress}: ${percent}%`}
+            className="h-1 rounded-none bg-brand-tint"
+          />
 
-      {editing ? (
-        <RoutineEditor
-          items={routineItems}
-          onChangeDays={onChangeDays}
-          onChangeTime={onChangeTime}
-          onRemove={onRemove}
-          onDone={() => setEditing(false)}
-        />
-      ) : visible.length === 0 ? (
-        <p className="px-4 py-8 text-center text-ink-2">{EMPTY_TEXT[filter]}</p>
-      ) : (
-        <ul aria-label="Tasks">
-          {visible.map((item) => (
-            <TaskRow key={`${item.kind}-${item.id}`} item={item} onToggle={onToggle} onDelete={handleDelete} />
-          ))}
-        </ul>
-      )}
+          {visible.length === 0 ? (
+            <p className="px-4 py-8 text-center text-ink-2">{emptyText(filter, day)}</p>
+          ) : (
+            <ul aria-label={words.list}>
+              {visible.map((item) => (
+                <TaskRow key={`${item.kind}-${item.id}`} item={item} onToggle={onToggle} onDelete={handleDelete} />
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
 
       <Dialog open={confirming !== null} onOpenChange={(open) => !open && setConfirming(null)}>
         <DialogContent
@@ -149,9 +201,9 @@ export function TodayTasksCard({
             returnFocus.current = null
             // Remove only now that focus is back in the row, so the page can move it to
             // the next row when the item disappears (keyboard users stay in place).
-            const id = pendingRemove.current
+            const removeId = pendingRemove.current
             pendingRemove.current = null
-            if (id) onRemove(id)
+            if (removeId) onRemove(removeId)
           }}
         >
           <DialogHeader>

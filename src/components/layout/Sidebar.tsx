@@ -4,7 +4,7 @@ import {
   Send,
   SlidersHorizontal,
   Target,
-  TrendingUp,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -33,7 +33,7 @@ const workspaceItems: NavItem[] = [
   { to: '/outreach', label: 'Outreach', icon: Send },
   { to: '/stats', label: 'Stats', icon: ChartNoAxesColumn },
   { to: '/goals', label: 'Goals', icon: Target },
-  { to: '/improve', label: 'Improvements', icon: TrendingUp },
+  { to: '/finance', label: 'Finance', icon: Wallet },
 ]
 
 const settingsItem: NavItem = { to: '/settings', label: 'Settings', icon: SlidersHorizontal }
@@ -47,7 +47,7 @@ function SidebarLink({ item, badge, label }: { item: NavItem; badge?: ReactNode;
       aria-label={label}
       className={({ isActive }) =>
         cn(
-          'flex h-10 shrink-0 items-center gap-3 rounded-lg px-3 text-sm font-medium whitespace-nowrap outline-none',
+          'flex h-10 shrink-0 items-center gap-3 rounded-full px-3.5 text-sm font-medium whitespace-nowrap outline-none',
           'focus-visible:ring-3 focus-visible:ring-ring/50',
           isActive ? 'bg-brand-tint text-brand' : 'text-ink-2 hover:bg-muted hover:text-foreground',
         )

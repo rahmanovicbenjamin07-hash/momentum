@@ -32,7 +32,7 @@ export function LoadError({ title, onRetry }: { title: string; onRetry: () => vo
 export function YearSelect({ value, years, onChange }: { value: number; years: readonly number[]; onChange: (year: number) => void }) {
   const id = useId()
   return (
-    <div className="flex h-10 items-center gap-2 rounded-lg border border-border bg-card pl-3 text-sm print:hidden">
+    <div className="glass-button flex h-10 items-center gap-2 border pl-3 text-sm print:hidden">
       <label htmlFor={id} className="text-ink-2">
         Year
       </label>

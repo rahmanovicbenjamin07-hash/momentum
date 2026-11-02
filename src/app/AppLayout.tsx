@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
-import { useNavigate, Outlet } from 'react-router'
+import { useLocation, useNavigate, Outlet } from 'react-router'
 import { toast } from 'sonner'
 import { queryKeys } from '@/api/keys'
 import { useMarkAllRead, useMarkRead, useNotifications, useUnreadCount } from '@/api/notifications'
@@ -9,6 +9,7 @@ import { AppShell } from '@/components/layout/AppShell'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from './auth-context'
 import { toNotificationItems } from './notificationsView'
+import { usePageFade } from './usePageFade'
 import { setTheme } from './theme'
 import { useFollowUpsDue } from './useOutreachWeek'
 import { useTodayData } from './useTodayData'
@@ -17,11 +18,14 @@ import { useUserToday } from './useUserToday'
 export default function AppLayout() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const { data: profile } = useProfile(user?.id)
   // Sidebar: open items today (badge) and the current streak. Shares the cache with the Today page.
   const { view: todayView, today } = useTodayData()
   const outreachDue = useFollowUpsDue(today)
   const { timeZone } = useUserToday()
+  // Screens and tabs fade in instead of switching all at once.
+  const pageRef = usePageFade<HTMLDivElement>()
 
   // The bell: unread dot, panel with the newest notifications.
   const queryClient = useQueryClient()
@@ -63,7 +67,12 @@ export default function AppLayout() {
       topBar={{
         user: { name: profile?.display_name ?? null, email: user?.email ?? '' },
         onSearch: () => toast('Search is coming in a later phase.'),
-        onNew: () => toast('Quick add is coming in a later phase.'),
+        // Add task lives on Today: go there (keeping the day you're looking at) and open its pop-up.
+        onNew: () =>
+          navigate(
+            { pathname: '/', search: location.pathname === '/' ? location.search : '' },
+            { state: { quickAdd: Date.now() } },
+          ),
         unreadCount: unread.data ?? 0,
         onNotifications: () => {
           setOpenedAt(new Date())
@@ -86,7 +95,9 @@ export default function AppLayout() {
       }}
       sidebar={{ todayCount: todayView?.openToday, outreachDue, streakDays: todayView?.streak.days }}
     >
-      <Outlet />
+      <div ref={pageRef}>
+        <Outlet />
+      </div>
     </AppShell>
   )
 }

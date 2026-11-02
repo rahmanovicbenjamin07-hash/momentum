@@ -1,6 +1,6 @@
 import { useId } from 'react'
 import { cn } from 'cn'
-import { Repeat, Trash2 } from 'lucide-react'
+import { RefreshCw, Trash2 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { formatRepeatDays, tagLabel, tagTone, type TagTone } from '@/lib/today-list'
 import type { Priority, TodayItem } from '@/schemas/today'
@@ -61,9 +61,13 @@ export function TaskRow({ item, onToggle, onDelete }: TaskRowProps) {
         </label>
         <div className="flex items-center gap-3">
           {item.kind === 'routine' ? (
-            <span className={cn(chip, TONE_CLASSES.brand)}>
-              <Repeat className="size-3" aria-hidden="true" />
-              Repeating · {formatRepeatDays(item.days ?? [])}
+            // Icon only; the days show on hover and screen readers hear them.
+            <span
+              title={`Repeating · ${formatRepeatDays(item.days ?? [])}`}
+              className={cn('grid size-6 place-items-center rounded-full', TONE_CLASSES.brand)}
+            >
+              <RefreshCw className="size-3.5" aria-hidden="true" />
+              <span className="sr-only">Repeating · {formatRepeatDays(item.days ?? [])}</span>
             </span>
           ) : (
             <>

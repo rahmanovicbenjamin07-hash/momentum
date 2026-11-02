@@ -188,6 +188,114 @@ export type Database = {
         }
         Relationships: []
       }
+      finance_entries: {
+        Row: {
+          amount: number
+          amount_eur: number
+          category: string
+          created_at: string
+          currency: string
+          date: string
+          id: string
+          kind: string
+          name: string
+          note: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          category: string
+          created_at?: string
+          currency?: string
+          date: string
+          id?: string
+          kind: string
+          name: string
+          note?: string | null
+          user_id?: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          currency?: string
+          date?: string
+          id?: string
+          kind?: string
+          name?: string
+          note?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      finance_settings: {
+        Row: {
+          created_at: string
+          id: string
+          starting_currency: string
+          starting_date: string
+          starting_savings: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          starting_currency?: string
+          starting_date: string
+          starting_savings?: number
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          starting_currency?: string
+          starting_date?: string
+          starting_savings?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      goal_milestones: {
+        Row: {
+          created_at: string
+          done_on: string | null
+          due_date: string | null
+          goal_id: string
+          id: string
+          position: number
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          done_on?: string | null
+          due_date?: string | null
+          goal_id: string
+          id?: string
+          position?: number
+          title: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          done_on?: string | null
+          due_date?: string | null
+          goal_id?: string
+          id?: string
+          position?: number
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "goal_milestones_goal_fk"
+            columns: ["goal_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "goals"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
       goal_updates: {
         Row: {
           created_at: string
@@ -228,10 +336,13 @@ export type Database = {
       }
       goals: {
         Row: {
+          completed_on: string | null
           created_at: string
           deadline: string
           id: string
           include_pipeline: boolean
+          kind: string
+          objective_id: string
           short_label: string
           source_id: string | null
           source_kind: string
@@ -244,10 +355,13 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          completed_on?: string | null
           created_at?: string
           deadline: string
           id?: string
           include_pipeline?: boolean
+          kind?: string
+          objective_id: string
           short_label: string
           source_id?: string | null
           source_kind?: string
@@ -260,10 +374,13 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          completed_on?: string | null
           created_at?: string
           deadline?: string
           id?: string
           include_pipeline?: boolean
+          kind?: string
+          objective_id?: string
           short_label?: string
           source_id?: string | null
           source_kind?: string
@@ -275,7 +392,15 @@ export type Database = {
           unit?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "goals_objective_fk"
+            columns: ["objective_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "objectives"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
       }
       ideas: {
         Row: {
@@ -479,6 +604,68 @@ export type Database = {
           read_at?: string | null
           title?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      objective_checkins: {
+        Row: {
+          confidence: number
+          created_at: string
+          date: string
+          id: string
+          note: string | null
+          objective_id: string
+          user_id: string
+        }
+        Insert: {
+          confidence: number
+          created_at?: string
+          date?: string
+          id?: string
+          note?: string | null
+          objective_id: string
+          user_id?: string
+        }
+        Update: {
+          confidence?: number
+          created_at?: string
+          date?: string
+          id?: string
+          note?: string | null
+          objective_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "objective_checkins_objective_fk"
+            columns: ["objective_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "objectives"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
+      objectives: {
+        Row: {
+          created_at: string
+          id: string
+          title: string
+          user_id: string
+          why: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          title: string
+          user_id?: string
+          why?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          title?: string
+          user_id?: string
+          why?: string | null
         }
         Relationships: []
       }

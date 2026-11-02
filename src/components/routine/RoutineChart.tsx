@@ -114,7 +114,7 @@ export function RoutineChart({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-4">
-          <div role="group" aria-label="Chart type" className="flex rounded-lg border border-border bg-muted p-1">
+          <div role="group" aria-label="Chart type" className="flex rounded-full border border-border bg-muted/60 p-1">
             {MODES.map((m) => (
               <button
                 key={m.value}
@@ -122,8 +122,8 @@ export function RoutineChart({
                 aria-pressed={mode === m.value}
                 onClick={() => onModeChange(m.value)}
                 className={cn(
-                  'h-8 rounded-md px-3 text-sm font-medium whitespace-nowrap outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
-                  mode === m.value ? 'bg-card text-foreground' : 'text-ink-2 hover:text-foreground',
+                  'h-8 rounded-full px-3.5 text-sm font-medium whitespace-nowrap outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
+                  mode === m.value ? 'bg-brand-tint font-semibold text-brand ring-1 ring-brand ring-inset' : 'text-ink-2 hover:bg-card/60 hover:text-foreground',
                 )}
               >
                 {m.label}
@@ -174,6 +174,9 @@ export function RoutineChart({
             onPointerLeave={() => setHovered(null)}
           >
             {hovered !== null && <rect x={PAD.left + band * hovered} y={PAD.top} width={band} height={plotH} fill={CHART.gridFaint} />}
+            {all.map((m, i) => (
+              <line key={m} x1={x(i)} x2={x(i)} y1={PAD.top} y2={base} stroke={CHART.gridFaint} />
+            ))}
             {ticks.map((t) => (
               <g key={t}>
                 <line x1={PAD.left} x2={width - PAD.right} y1={y(t)} y2={y(t)} stroke={t === 0 ? CHART.grid : CHART.gridFaint} />
@@ -282,34 +285,37 @@ export function RoutineChart({
         <li className="text-ink-3">Hover a month for details</li>
       </ul>
 
-      <table className="sr-only">
-        <caption>
-          {title} {year}, by month
-        </caption>
-        <thead>
-          <tr>
-            <th scope="col">Month</th>
-            <th scope="col">Done</th>
-            <th scope="col">Scheduled</th>
-            <th scope="col">Running total</th>
-            <th scope="col">Perfect year</th>
-          </tr>
-        </thead>
-        <tbody>
-          {all.map((m, i) => {
-            const row = byIndex.get(i)
-            return (
-              <tr key={m}>
-                <th scope="row">{monthName(m)}</th>
-                <td>{row ? row.done : '—'}</td>
-                <td>{row ? row.scheduled : '—'}</td>
-                <td>{row ? row.total : ahead.has(i) ? `forecast ${Math.round(ahead.get(i)!)}` : '—'}</td>
-                <td>{perfect.get(i) ?? '—'}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+      {/* Hidden data table for screen readers. In a div: a <table> ignores sr-only's 1px size, and its rows would make the page scroll. */}
+      <div className="sr-only">
+        <table>
+          <caption>
+            {title} {year}, by month
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Month</th>
+              <th scope="col">Done</th>
+              <th scope="col">Scheduled</th>
+              <th scope="col">Running total</th>
+              <th scope="col">Perfect year</th>
+            </tr>
+          </thead>
+          <tbody>
+            {all.map((m, i) => {
+              const row = byIndex.get(i)
+              return (
+                <tr key={m}>
+                  <th scope="row">{monthName(m)}</th>
+                  <td>{row ? row.done : '—'}</td>
+                  <td>{row ? row.scheduled : '—'}</td>
+                  <td>{row ? row.total : ahead.has(i) ? `forecast ${Math.round(ahead.get(i)!)}` : '—'}</td>
+                  <td>{perfect.get(i) ?? '—'}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
     </section>
   )
 }

@@ -91,7 +91,7 @@ export function ContactsTable({ contacts, today, filtered, onClearFilters, onAdd
             {contacts.map((lead) => {
               const shortLine = leadShortLine(lead)
               return (
-                <tr key={lead.id} className="relative hover:bg-background focus-within:bg-background">
+                <tr key={lead.id} className="relative transition-colors hover:bg-foreground/[0.03] focus-within:bg-foreground/[0.03]">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <LeadAvatar lead={lead} />

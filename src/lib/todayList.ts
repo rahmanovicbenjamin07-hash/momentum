@@ -21,9 +21,9 @@ export function isScheduledOn(item: SchedulableItem, date: DateKey, timeZone: st
   return true
 }
 
-export type TodayRoutineInput = Pick<RoutineItem, 'id' | 'title' | 'days' | 'time' | 'active'> & { created_at?: string }
+export type TodayRoutineInput = Pick<RoutineItem, 'id' | 'title' | 'days' | 'time' | 'active'> & { created_at?: string; position?: number }
 export type TodayCheckInput = Pick<RoutineCheck, 'routine_item_id' | 'date' | 'done'>
-export type TodayTaskInput = Pick<Task, 'id' | 'title' | 'time' | 'due_date' | 'status' | 'tag' | 'priority'>
+export type TodayTaskInput = Pick<Task, 'id' | 'title' | 'time' | 'due_date' | 'status' | 'tag' | 'priority'> & { position?: number }
 
 /**
  * Everything for one day in a single sorted list:
@@ -47,6 +47,7 @@ export function buildTodayItems(
       time: toHHMM(item.time),
       done: doneIds.has(item.id),
       days: [...item.days],
+      ...(item.position === undefined ? {} : { position: item.position }),
     }))
 
   const oneOff: TodayItem[] = tasks
@@ -59,6 +60,7 @@ export function buildTodayItems(
       done: task.status === 'done',
       tag: task.tag,
       priority: task.priority,
+      ...(task.position === undefined ? {} : { position: task.position }),
     }))
 
   return sortTodayItems([...routine, ...oneOff])

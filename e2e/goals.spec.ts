@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { mockSupabase, TEST_USER, type MockDb, type Row } from './support/mockSupabase.ts'
 
 // Wednesday 28 Oct 2026, 10:00 in Sarajevo.
@@ -37,9 +37,15 @@ function seed(): MockDb {
   })
   // Money earned Jan–Oct 2026 = €13,950 (design/progress.png).
   const money = [850, 920, 1100, 980, 1350, 1500, 1420, 1680, 1950, 2200]
+  // Each goal is the only key result of its own objective, with the same id (as the objectives migration does).
   const goal = (id: string, title: string, short_label: string, extra: Row): Row => ({
     ...base,
     id,
+    objective_id: id,
+    kind: 'number',
+    completed_on: null,
+    unit: null,
+    start_value: 0,
     title,
     short_label,
     type: 'total',
@@ -68,6 +74,15 @@ function seed(): MockDb {
       ...money.map((_, i) => entry(M_TRAININGS, month(i), 12)),
       ...money.map((_, i) => entry(M_HOURS, month(i), 140)),
     ],
+    objectives: [
+      ['g-money', 'Earn €18,000 in 2026'],
+      ['g-trainings', '150 trainings this year'],
+      ['g-hours', 'Work 1,650 hours this year'],
+      ['g-wake', 'Wake up at 06:00 on 200 days'],
+      ['g-month', 'Earn €3,000 in a single month'],
+    ].map(([id, title]) => ({ ...base, id, title, why: null })),
+    objective_checkins: [],
+    goal_milestones: [],
     goals: [
       goal('g-money', 'Earn €18,000 in 2026', '€18k in 2026', { source_id: M_MONEY, target: 18000, deadline: '2027-01-01', include_pipeline: true }),
       goal('g-trainings', '150 trainings this year', '150 trainings', { source_id: M_TRAININGS, target: 150 }),
@@ -103,6 +118,26 @@ async function open(page: Page, path = '/goals'): Promise<MockDb> {
 const chip = (page: Page, name: string) => page.getByRole('group', { name: 'Goals' }).getByRole('button', { name: new RegExp(`^${name}`) })
 const sentence = (page: Page) => page.locator('p[aria-live="polite"]').first()
 
+/** Opens the dropdown labelled `label` and picks the option named `option`. */
+async function choose(page: Page, scope: Locator, label: string, option: string) {
+  await scope.getByLabel(label, { exact: true }).click()
+  await page.getByRole('option', { name: option, exact: true }).click()
+  await expect(page.getByRole('listbox')).toHaveCount(0)
+}
+
+/** Opens the date picker labelled `label`, steps to the month of `key` and clicks that day. */
+async function pickDate(page: Page, scope: Locator, label: string, key: string) {
+  await scope.getByLabel(label, { exact: true }).click()
+  const calendar = page.locator('[data-slot="popover-content"]')
+  // The 15th cell of the 6-week grid is always inside the month on screen.
+  const shownMonth = async () => ((await calendar.locator('[data-day]').nth(14).getAttribute('data-day')) ?? '').slice(0, 7)
+  for (let shown = await shownMonth(), i = 0; shown !== key.slice(0, 7) && i < 36; shown = await shownMonth(), i++) {
+    await calendar.getByRole('button', { name: shown < key.slice(0, 7) ? 'Next month' : 'Previous month' }).click()
+  }
+  await calendar.locator(`[data-day="${key}"]`).click()
+  await expect(calendar).toHaveCount(0)
+}
+
 // Money: €13,950 + €1,910 expected = €15,860. Real pace = Jul–Sep average €1,683.
 // €2,140 left ÷ €1,683 a month = 39 days → 6 Dec 2026, 26 days before 1 Jan 2027.
 const MONEY_SENTENCE =
@@ -113,13 +148,16 @@ test.describe('Goals', () => {
 
   test('the first goal shows its forecast, pipeline and needed pace', async ({ page }) => {
     await open(page)
-    await expect(chip(page, '€18k in 2026')).toHaveAttribute('aria-pressed', 'true')
-    await expect(page.getByRole('heading', { name: 'Earn €18,000 in 2026' })).toBeVisible()
+    await expect(chip(page, 'Earn €18,000 in 2026')).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByRole('heading', { name: 'Earn €18,000 in 2026', level: 2 })).toBeVisible()
     await expect(sentence(page)).toHaveText(MONEY_SENTENCE)
     await expect(page.getByText('€13,950 + €1,910 expected of €18,000')).toBeVisible()
     await expect(page.getByText(/^To finish by 1 Jan 2027 you need €[\d,]+ a month\.$/)).toBeVisible()
     await expect(page.getByText('Nova Dental')).toBeVisible()
     await expect(page.getByText('Not counted')).toHaveCount(0)
+    // One key result → the goal's overall progress is that key result's (13,950 of 18,000).
+    await expect(page.getByText('1 KEY RESULT · BY 1 JAN 2027')).toBeVisible()
+    await expect(page.getByText('77% done')).toBeVisible()
   })
 
   test('the slider changes the finish date live; "My pace" puts it back', async ({ page }) => {
@@ -141,35 +179,40 @@ test.describe('Goals', () => {
 
   test('the chips switch goals', async ({ page }) => {
     await open(page)
-    await chip(page, '200 early mornings').click()
+    await chip(page, 'Wake up at 06:00 on 200 days').click()
     await expect(page).toHaveURL(/goal=g-wake/)
-    await expect(chip(page, '200 early mornings')).toHaveAttribute('aria-pressed', 'true')
-    await expect(page.getByRole('heading', { name: 'Wake up at 06:00 on 200 days' })).toBeVisible()
+    await expect(chip(page, 'Wake up at 06:00 on 200 days')).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByRole('heading', { name: 'Wake up at 06:00 on 200 days', level: 2 })).toBeVisible()
     await expect(sentence(page)).toContainText("you'll reach 200 days on")
     await expect(page.getByText('Count open deals', { exact: false })).toHaveCount(0)
 
     // A level goal: growth, no pace slider.
-    await chip(page, '€3k month').click()
+    await chip(page, 'Earn €3,000 in a single month').click()
     await expect(sentence(page)).toHaveText(/^At your current growth \(\+€[\d,]+ a month\) you'll reach €3,000 a month in \w{3} 20\d\d/)
     await expect(page.getByRole('slider', { name: 'Monthly pace' })).toHaveCount(0)
   })
 
-  test('creating a goal adds and selects its chip', async ({ page }) => {
+  test('creating a number goal adds and selects its chip', async ({ page }) => {
     const db = await open(page)
     await page.getByRole('button', { name: 'New goal' }).click()
-    await page.getByLabel('Name').fill('Have 10,000 KM saved by May')
-    await page.getByLabel('Short label').fill('10k KM')
-    await page.getByLabel('Unit').selectOption({ label: 'Bosnian mark (KM)' })
-    await page.getByLabel('Starting point').fill('3000')
-    await page.getByLabel('Target', { exact: true }).fill('10,000')
-    await page.getByLabel('Deadline').fill('2027-05-03')
-    await page.getByRole('button', { name: 'Create goal' }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByLabel('Goal', { exact: true }).fill('Have 10,000 KM saved by May')
+    await choose(page, dialog, 'Unit', 'Bosnian mark (KM)')
+    await dialog.getByLabel('Starting point').fill('3000')
+    await dialog.getByLabel('Target', { exact: true }).fill('10,000')
+    await pickDate(page, dialog, 'Deadline', '2027-05-03')
+    await dialog.getByRole('button', { name: 'Create goal' }).click()
 
-    await expect(chip(page, '10k KM')).toHaveAttribute('aria-pressed', 'true')
-    await expect(page.getByRole('heading', { name: 'Have 10,000 KM saved by May' })).toBeVisible()
-    await expect(page.getByText('UPDATED BY HAND · no updates yet · deadline 3 May 2027')).toBeVisible()
+    await expect(chip(page, 'Have 10,000 KM saved by May')).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByRole('heading', { name: 'Have 10,000 KM saved by May', level: 2 })).toBeVisible()
+    await expect(page.getByText('UPDATED BY HAND', { exact: false })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Update', exact: true })).toBeVisible()
     await expect(page.getByText('3,000 KM of 10,000 KM · started at 3,000 KM')).toBeVisible()
-    await expect.poll(() => db.goals?.find((g) => g.short_label === '10k KM')).toMatchObject({
+    await expect.poll(() => db.objectives?.some((o) => o.title === 'Have 10,000 KM saved by May')).toBe(true)
+    const objectiveId = db.objectives?.find((o) => o.title === 'Have 10,000 KM saved by May')?.id
+    await expect.poll(() => db.goals?.find((g) => g.title === 'Have 10,000 KM saved by May')).toMatchObject({
+      objective_id: objectiveId,
+      kind: 'number',
       type: 'total',
       source_kind: 'manual',
       source_id: null,
@@ -181,13 +224,101 @@ test.describe('Goals', () => {
     })
   })
 
+  test('a goal with steps: tick one, add one, delete one; then add a done / not done key result and mark it done', async ({ page }) => {
+    const db = await open(page)
+    await page.getByRole('button', { name: 'New goal' }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByLabel('Goal', { exact: true }).fill('Launch my studio')
+    await dialog.getByText('Steps', { exact: true }).click()
+    await dialog.getByLabel('Key result (optional)').fill('Website live')
+    await dialog.getByLabel('Step 1', { exact: true }).fill('Buy the domain')
+    await pickDate(page, dialog, 'Step 1 due date (optional)', '2026-11-15')
+    await dialog.getByLabel('Step 2', { exact: true }).fill('Go live')
+    await pickDate(page, dialog, 'Deadline', '2026-12-31')
+    await dialog.getByRole('button', { name: 'Create goal' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Launch my studio', level: 2 })).toBeVisible()
+    await expect(page.getByText('0 of 2 steps done')).toBeVisible()
+    await expect.poll(() => db.goal_milestones?.map((m) => [m.title, m.due_date, m.position])).toEqual([
+      ['Buy the domain', '2026-11-15', 0],
+      ['Go live', null, 1],
+    ])
+
+    await page.getByRole('checkbox', { name: 'Buy the domain' }).click()
+    await expect(page.getByText('1 of 2 steps done')).toBeVisible()
+    await expect(page.getByText('50% done')).toBeVisible()
+    await expect.poll(() => db.goal_milestones?.find((m) => m.title === 'Buy the domain')?.done_on).toBe('2026-10-28')
+
+    await page.getByLabel('New step').fill('Tell old clients')
+    await page.getByRole('button', { name: 'Add step' }).click()
+    await expect(page.getByText('1 of 3 steps done')).toBeVisible()
+    await page.getByRole('button', { name: 'Delete step Go live' }).click()
+    await expect(page.getByText('1 of 2 steps done')).toBeVisible()
+    await expect.poll(() => db.goal_milestones?.map((m) => m.title)).toEqual(['Buy the domain', 'Tell old clients'])
+
+    // Second key result: done / not done.
+    await page.getByRole('button', { name: 'Add key result' }).click()
+    const add = page.getByRole('dialog')
+    await add.getByText('Done / not done', { exact: true }).click()
+    await add.getByLabel('Key result', { exact: true }).fill('Register the business')
+    await pickDate(page, add, 'Deadline', '2026-11-30')
+    await add.getByRole('button', { name: 'Add key result' }).click()
+    await expect(page.getByText('2 KEY RESULTS · BY 31 DEC 2026')).toBeVisible()
+    await expect(page.getByText('Not done yet · 33 days left')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Mark as done' }).click()
+    await expect(page.getByText('Done on 28 Oct 2026')).toBeVisible()
+    // (50% + 100%) ÷ 2.
+    await expect(page.getByText('75% done overall')).toBeVisible()
+    await expect.poll(() => db.goals?.find((g) => g.title === 'Register the business')).toMatchObject({ kind: 'done', completed_on: '2026-10-28', target: 1 })
+  })
+
+  test('a habit ticked by hand', async ({ page }) => {
+    const db = await open(page)
+    await page.getByRole('button', { name: 'New goal' }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByLabel('Goal', { exact: true }).fill('Get fit')
+    await dialog.getByText('Habit', { exact: true }).click()
+    await dialog.getByLabel('Key result (optional)').fill('Gym 3 times a week')
+    await choose(page, dialog, 'Times a week', '3× a week')
+    await pickDate(page, dialog, 'Start date', '2026-10-26')
+    await pickDate(page, dialog, 'Keep it up until', '2026-12-27')
+    await dialog.getByRole('button', { name: 'Create goal' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Get fit', level: 2 })).toBeVisible()
+    const week = page.getByRole('group', { name: 'This week' })
+    await expect(week.getByRole('button', { name: 'Thu 29 Oct 2026' })).toBeDisabled()
+    await week.getByRole('button', { name: 'Mon 26 Oct 2026' }).click()
+    await week.getByRole('button', { name: 'Tue 27 Oct 2026' }).click()
+    await week.getByRole('button', { name: 'Wed 28 Oct 2026' }).click()
+    await expect(week.getByRole('button', { name: 'Wed 28 Oct 2026' })).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByText('3 of 3 · done for this week')).toBeVisible()
+    await expect(page.getByText('1 of 9 weeks hit')).toBeVisible()
+    const goalId = db.goals?.find((g) => g.title === 'Gym 3 times a week')?.id
+    await expect.poll(() => db.goal_updates?.filter((u) => u.goal_id === goalId).map((u) => u.date).sort()).toEqual([
+      '2026-10-26',
+      '2026-10-27',
+      '2026-10-28',
+    ])
+
+    // Untick one.
+    await week.getByRole('button', { name: 'Tue 27 Oct 2026' }).click()
+    await expect(page.getByText('2 of 3', { exact: true })).toBeVisible()
+    await expect.poll(() => db.goal_updates?.filter((u) => u.goal_id === goalId).length).toBe(2)
+
+  })
+
   test('a hand-updated goal: save an update, delete it, then delete the goal', async ({ page }) => {
     const db = await open(page)
     // A goal started in June at €3,000 with one update in September.
+    db.objectives?.push({ user_id: TEST_USER.id, created_at: CREATED, id: 'g-saved', title: 'Have €10,000 saved by May', why: null })
     db.goals?.push({
       user_id: TEST_USER.id,
       created_at: CREATED,
       id: 'g-saved',
+      objective_id: 'g-saved',
+      kind: 'number',
+      completed_on: null,
       title: 'Have €10,000 saved by May',
       short_label: '€10k saved',
       type: 'total',
@@ -211,7 +342,6 @@ test.describe('Goals', () => {
     })
     await page.goto('/goals?goal=g-saved')
     await expect(page.getByText('€4,000 of €10,000 · started at €3,000')).toBeVisible()
-    await expect(page.getByText('UPDATED BY HAND · last update 1 Sep 2026 · deadline 3 May 2027')).toBeVisible()
     await expect(page.getByText('Count open deals', { exact: false })).toHaveCount(0)
 
     await page.getByRole('button', { name: 'Update', exact: true }).click()
@@ -233,8 +363,8 @@ test.describe('Goals', () => {
 
     await page.getByRole('button', { name: 'Delete goal' }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'Delete goal' }).click()
-    await expect(chip(page, '€10k saved')).toHaveCount(0)
-    await expect.poll(() => db.goals?.some((g) => g.id === 'g-saved')).toBe(false)
+    await expect(chip(page, 'Have €10,000 saved by May')).toHaveCount(0)
+    await expect.poll(() => db.objectives?.some((o) => o.id === 'g-saved')).toBe(false)
   })
 })
 

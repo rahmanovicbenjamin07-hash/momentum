@@ -26,7 +26,7 @@ export function AppShell({ topBar, sidebar, children }: AppShellProps) {
         <div className="contents print:hidden">
           <Sidebar {...sidebar} />
         </div>
-        <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 outline-none md:px-8 md:py-8 print:p-0">
+        <main id="main" tabIndex={-1} className="glass-backdrop min-w-0 flex-1 px-4 py-6 outline-none md:px-8 md:py-8 print:p-0">
           <div className="mx-auto max-w-[1200px]">{children}</div>
         </main>
       </div>

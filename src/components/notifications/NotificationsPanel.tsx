@@ -68,7 +68,7 @@ export function NotificationsPanel({ items, onMarkAllRead, onOpen, onClose, anch
       tabIndex={-1}
       className={cn(
         // Phones: full width under the top bar's first row. Wider screens: 360px under the bell.
-        'absolute inset-x-4 top-[60px] z-50 overflow-hidden rounded-xl border border-border bg-card text-left text-foreground outline-none',
+        'glass-panel glass-popover absolute inset-x-4 top-[60px] z-50 overflow-hidden border text-left text-foreground outline-none',
         'sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-[360px]',
       )}
     >

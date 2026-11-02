@@ -32,8 +32,8 @@ export function SourceFilter({ counts, value, onChange }: SourceFilterProps) {
             aria-label={`${label}, ${count}`}
             onClick={() => onChange(option)}
             className={cn(
-              'inline-flex h-10 items-center gap-2 rounded-lg border px-3.5 text-sm font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
-              selected ? 'border-foreground bg-foreground text-background' : 'border-border bg-card text-foreground hover:bg-muted',
+              'inline-flex h-10 items-center gap-2 rounded-xl border px-3.5 text-sm font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
+              selected ? 'border-foreground bg-foreground text-background' : 'glass-button text-foreground',
             )}
           >
             <Icon aria-hidden="true" className="size-4 shrink-0" />
@@ -41,7 +41,7 @@ export function SourceFilter({ counts, value, onChange }: SourceFilterProps) {
             <span
               className={cn(
                 'rounded-md px-1.5 text-xs font-medium tabular-nums',
-                selected ? 'bg-background/20 text-background' : 'bg-muted text-ink-2',
+                selected ? 'bg-background/20 text-background' : 'bg-foreground/[0.06] text-ink-2',
               )}
             >
               {count}

@@ -12,7 +12,7 @@ import type { ReplyRateRow as ReplyBar } from '@/components/stats/ReplyRateBars'
 import type { RevenueByChannel, RevenueByTemplate } from '@/components/stats/RevenueCard'
 import type { TagCount } from '@/components/stats/TagBars'
 import type { TemplateStat } from '@/components/stats/TemplatesTable'
-import { addDays, dayIndex, daysBetween, type DateKey } from '@/lib/dates'
+import { addDays, daysBetween, type DateKey } from '@/lib/dates'
 import { isScheduledOn } from '@/lib/todayList'
 import { formatNumber1, movingAverage7, type Insight, type InsightDay, type InsightId } from '@/lib/stats'
 import { CHANNEL_LABELS, STAGE_LABELS, type Channel, type Stage } from '@/schemas/outreach'
@@ -31,10 +31,11 @@ export const INSIGHT_DAYS = 90
 /**
  * The one daily-completion range that covers everything the Overview shows:
  * the previous period (for KPI changes), 6 extra days for the first 7-day
- * averages, the 12-week heatmap and the insights window.
+ * averages, the heatmap's current round (it can have started up to 83 days ago)
+ * and the insights window.
  */
 export function completionFetchRange(today: DateKey, previousFrom: DateKey, currentFrom: DateKey): { from: DateKey; to: DateKey } {
-  const heatStart = addDays(addDays(today, -dayIndex(today)), -(HEATMAP_WEEKS - 1) * 7)
+  const heatStart = addDays(today, -(HEATMAP_WEEKS * 7 - 1))
   const from = [previousFrom, addDays(currentFrom, -6), heatStart, insightWindow(today).from].sort()[0] ?? previousFrom
   return { from, to: today }
 }
@@ -58,8 +59,6 @@ export type PeriodTotals = {
   total: number
   tasksCompleted: number
   sent: number
-  replies: number
-  meetings: number
 }
 
 const sum = <T>(rows: readonly T[], f: (row: T) => number) => rows.reduce((n, r) => n + f(r), 0)
@@ -68,7 +67,6 @@ export function periodTotals(input: {
   completion: readonly DailyCompletionRow[]
   tags: readonly TagCountRow[]
   replies: readonly ReplyRateRow[]
-  funnel: readonly FunnelStepRow[]
 }): PeriodTotals {
   const channels = input.replies.filter((r) => r.dimension === 'channel')
   return {
@@ -76,8 +74,6 @@ export function periodTotals(input: {
     total: sum(input.completion, (r) => r.total),
     tasksCompleted: sum(input.tags, (r) => r.done),
     sent: sum(channels, (r) => r.sent),
-    replies: sum(channels, (r) => r.replies),
-    meetings: input.funnel.find((r) => r.stage === 'meeting')?.contacts ?? 0,
   }
 }
 
@@ -121,9 +117,6 @@ export function buildKpis(
 ): KpiData[] {
   const completion = rate(current.done, current.total)
   const completionBefore = rate(previous.done, previous.total)
-  const reply = rate(current.replies, current.sent)
-  const replyBefore = rate(previous.replies, previous.sent)
-  const meetingDelta = current.meetings - previous.meetings
   return [
     {
       label: 'Task completion',
@@ -133,16 +126,6 @@ export function buildKpis(
     { label: 'Tasks completed', value: String(current.tasksCompleted), change: countChange(current.tasksCompleted, previous.tasksCompleted, rangeDays) },
     { label: 'Current streak', value: days(streak.current), note: `Best ${days(streak.best)}` },
     { label: 'Outreach sent', value: String(current.sent), change: countChange(current.sent, previous.sent, rangeDays) },
-    {
-      label: 'Reply rate',
-      value: reply === null ? '—' : `${formatNumber1(reply * 100)}%`,
-      change: pointsChange(reply, replyBefore, 1),
-    },
-    {
-      label: 'Meetings booked',
-      value: String(current.meetings),
-      change: { text: meetingDelta === 0 ? 'Same' : signed(meetingDelta, String(Math.abs(meetingDelta))), direction: direction(meetingDelta) },
-    },
   ]
 }
 

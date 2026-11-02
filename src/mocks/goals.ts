@@ -2,6 +2,8 @@ import type { DateKey } from '@/lib/dates'
 import type { MonthValue } from '@/lib/forecast'
 import type { GoalChip } from '@/components/goals/GoalChips'
 import type { GoalStatus, PipelineDeal } from '@/components/goals/meta'
+import type { HabitDay, HabitWeekCell } from '@/components/goals/HabitTracker'
+import type { MilestoneItem } from '@/components/goals/MilestoneList'
 import type { GoalUpdate } from '@/schemas/goals'
 
 /** The five goals from design/goals.png. Statuses are picked to show every dot colour. */
@@ -26,13 +28,11 @@ export const mockPipelineTotal = mockPipelineDeals.reduce((sum, d) => sum + d.ex
 
 /** Header of the money goal, with and without the pipeline counted. */
 export const mockMoneyGoalHeader: {
-  sourceLine: string
   title: string
   progressText: string
   progressTextNoPipeline: string
   status: GoalStatus
 } = {
-  sourceLine: 'MY METRIC · Money earned · deadline 1 Jan 2027',
   title: 'Earn €18,000 in 2026',
   progressText: '€13,950 + €1,910 expected of €18,000',
   progressTextNoPipeline: '€13,950 of €18,000',
@@ -75,3 +75,47 @@ export const mockGoalUpdates: GoalUpdate[] = [
   { id: 'u-2', user_id: 'u', goal_id: 'g-saved', date: '2026-08-01', value: 4300, note: null, created_at: '2026-08-01T18:00:00+00:00' },
   { id: 'u-1', user_id: 'u', goal_id: 'g-saved', date: '2026-06-01', value: 3600, note: 'First month', created_at: '2026-06-01T18:00:00+00:00' },
 ]
+
+// ---------------------------------------------------------------------------
+// Objective + key results of every kind
+// ---------------------------------------------------------------------------
+
+/** Steps of "Launch the new website" (one overdue on MOCK_GOALS_TODAY). */
+export const mockMilestones: MilestoneItem[] = [
+  { id: 'm-1', title: 'Buy the domain', due_date: '2026-10-05', done_on: '2026-10-03' },
+  { id: 'm-2', title: 'Design the homepage', due_date: '2026-10-20', done_on: null },
+  { id: 'm-3', title: 'Write the copy', due_date: '2026-11-15', done_on: null },
+  { id: 'm-4', title: 'Go live', due_date: null, done_on: null },
+]
+
+/** "Gym 3× a week" since 7 Sep 2026: 7 weeks done, one missed; this week 1 of 3 so far. */
+export const mockHabitWeeks: HabitWeekCell[] = [
+  { start: '2026-09-07', count: 3, needed: 3, hit: true, current: false },
+  { start: '2026-09-14', count: 4, needed: 3, hit: true, current: false },
+  { start: '2026-09-21', count: 1, needed: 3, hit: false, current: false },
+  { start: '2026-09-28', count: 3, needed: 3, hit: true, current: false },
+  { start: '2026-10-05', count: 3, needed: 3, hit: true, current: false },
+  { start: '2026-10-12', count: 3, needed: 3, hit: true, current: false },
+  { start: '2026-10-19', count: 5, needed: 3, hit: true, current: false },
+  { start: '2026-10-26', count: 1, needed: 3, hit: false, current: true },
+]
+
+/** This week (Mon 26 Oct – Sun 1 Nov) on Wednesday 28 Oct: Monday ticked. */
+export const mockHabitDays: HabitDay[] = [
+  { date: '2026-10-26', weekday: 'Mon', done: true, disabled: false },
+  { date: '2026-10-27', weekday: 'Tue', done: false, disabled: false },
+  { date: '2026-10-28', weekday: 'Wed', done: false, disabled: false },
+  { date: '2026-10-29', weekday: 'Thu', done: false, disabled: true },
+  { date: '2026-10-30', weekday: 'Fri', done: false, disabled: true },
+  { date: '2026-10-31', weekday: 'Sat', done: false, disabled: true },
+  { date: '2026-11-01', weekday: 'Sun', done: false, disabled: true },
+]
+
+/** The objective with one key result of each kind. */
+export const mockObjective = {
+  line: '4 KEY RESULTS · BY 31 MAR 2027',
+  title: 'Become a fully booked freelancer',
+  why: 'So I can pick my clients and stop worrying about next month.',
+  percent: 46,
+  status: 'slightly_behind' as GoalStatus,
+}

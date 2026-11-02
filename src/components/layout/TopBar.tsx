@@ -67,19 +67,16 @@ export function TopBar({
             <label htmlFor="global-search" className="sr-only">
               Search
             </label>
-            <div className="flex h-10 items-center gap-2.5 rounded-lg border border-topbar-line bg-topbar-field px-3 focus-within:border-topbar-focus focus-within:ring-3 focus-within:ring-topbar-focus/40">
+            <div className="glass-search flex h-10 items-center gap-2.5 border px-4 focus-within:ring-3 focus-within:ring-topbar-focus/40">
               <Search className="size-4 shrink-0 text-topbar-text" aria-hidden="true" />
               <input
                 ref={searchRef}
                 id="global-search"
                 type="search"
-                placeholder="Search tasks, contacts, notes..."
+                placeholder="Search"
                 autoComplete="off"
                 className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-topbar-muted"
               />
-              <kbd className="hidden shrink-0 rounded-md border border-topbar-line-strong px-1.5 py-0.5 font-sans text-[11px] text-topbar-text sm:inline-block">
-                Ctrl K
-              </kbd>
             </div>
           </form>
         </search>
@@ -88,7 +85,7 @@ export function TopBar({
           <button
             type="button"
             onClick={onNew}
-            className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-topbar-button px-4 text-sm font-semibold text-white outline-none hover:bg-topbar-button-hover focus-visible:ring-3 focus-visible:ring-white/50"
+            className="glass-button glass-button-primary glass-pill inline-flex h-10 items-center gap-1.5 border px-4 text-sm font-semibold outline-none focus-visible:ring-3 focus-visible:ring-white/50"
           >
             <Plus className="size-4" aria-hidden="true" />
             New
@@ -103,7 +100,7 @@ export function TopBar({
               aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
               aria-haspopup="dialog"
               aria-expanded={panelOpen}
-              className="relative grid size-9 place-items-center rounded-lg text-topbar-text outline-none hover:bg-white/10 focus-visible:ring-3 focus-visible:ring-white/50 aria-expanded:bg-white/10"
+              className="relative grid size-9 place-items-center rounded-full text-topbar-text outline-none hover:bg-white/10 focus-visible:ring-3 focus-visible:ring-white/50 aria-expanded:bg-white/10"
             >
               <Bell className="size-5" aria-hidden="true" />
               {unreadCount > 0 && (

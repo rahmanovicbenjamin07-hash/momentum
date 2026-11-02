@@ -48,15 +48,24 @@ describe('DailyNoteCard autosave', () => {
 })
 
 describe('DailyNoteCard energy', () => {
-  it('picks a level and clears it when clicked again', () => {
+  it('starts as "Not set"; clicking the slider sets the middle level', () => {
+    const { onEnergyChange } = setup()
+    const slider = screen.getByRole('slider', { name: 'Energy' })
+    expect(slider).toHaveAttribute('aria-valuetext', 'Not set')
+    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull()
+    fireEvent.click(slider)
+    expect(onEnergyChange).toHaveBeenLastCalledWith(3)
+  })
+
+  it('slides to a level and clears it', () => {
     const { onEnergyChange, rerender, onSaveNote } = setup()
-    fireEvent.click(screen.getByRole('button', { name: 'Energy 4 of 5' }))
+    fireEvent.change(screen.getByRole('slider', { name: 'Energy' }), { target: { value: '4' } })
     expect(onEnergyChange).toHaveBeenLastCalledWith(4)
 
     rerender(<DailyNoteCard note="" energy={4} onSaveNote={onSaveNote} onEnergyChange={onEnergyChange} />)
-    const four = screen.getByRole('button', { name: 'Energy 4 of 5' })
-    expect(four).toHaveAttribute('aria-pressed', 'true')
-    fireEvent.click(four)
+    expect(screen.getByRole('slider', { name: 'Energy' })).toHaveAttribute('aria-valuetext', '4 of 5')
+    expect(screen.getByText('4/5')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
     expect(onEnergyChange).toHaveBeenLastCalledWith(null)
   })
 })

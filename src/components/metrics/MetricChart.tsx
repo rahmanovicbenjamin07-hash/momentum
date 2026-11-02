@@ -141,18 +141,11 @@ export function MetricChart({
   return (
     <section aria-labelledby={`${id}-title`} className="rounded-xl border border-border bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 id={`${id}-title`} className="text-lg font-semibold text-foreground">
-            {name} · {year}
-          </h2>
-          <p className="text-[13px] text-ink-2">
-            {running
-              ? 'Running total — every month adds on top, so you see the year grow'
-              : 'Per month — each bar is one month on its own'}
-          </p>
-        </div>
+        <h2 id={`${id}-title`} className="text-lg font-semibold text-foreground">
+          {name} · {year}
+        </h2>
         <div className="flex flex-wrap items-center gap-4">
-          <div role="group" aria-label="Chart type" className="flex rounded-lg border border-border bg-muted p-1">
+          <div role="group" aria-label="Chart type" className="flex rounded-full border border-border bg-muted/60 p-1">
             {MODES.map((m) => (
               <button
                 key={m.value}
@@ -160,8 +153,8 @@ export function MetricChart({
                 aria-pressed={mode === m.value}
                 onClick={() => onModeChange(m.value)}
                 className={cn(
-                  'h-8 rounded-md px-3 text-sm font-medium whitespace-nowrap outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
-                  mode === m.value ? 'bg-card text-foreground' : 'text-ink-2 hover:text-foreground',
+                  'h-8 rounded-full px-3.5 text-sm font-medium whitespace-nowrap outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
+                  mode === m.value ? 'bg-brand-tint font-semibold text-brand ring-1 ring-brand ring-inset' : 'text-ink-2 hover:bg-card/60 hover:text-foreground',
                 )}
               >
                 {m.label}
@@ -211,6 +204,9 @@ export function MetricChart({
           >
             {hovered !== null && <rect x={PAD.left + band * hovered} y={PAD.top} width={band} height={plotH} fill={CHART.gridFaint} />}
 
+            {allMonths.map((m, i) => (
+              <line key={m} x1={x(i)} x2={x(i)} y1={PAD.top} y2={base} stroke={CHART.gridFaint} />
+            ))}
             {ticks.map((t) => (
               <g key={t}>
                 <line x1={PAD.left} x2={width - PAD.right} y1={y(t)} y2={y(t)} stroke={t === 0 ? CHART.grid : CHART.gridFaint} />
@@ -334,29 +330,32 @@ export function MetricChart({
         <li className="text-ink-3">Hover a month for details</li>
       </ul>
 
-      <table className="sr-only">
-        <caption>
-          {name} {year}, by month
-        </caption>
-        <thead>
-          <tr>
-            <th scope="col">Month</th>
-            <th scope="col">Value</th>
-            <th scope="col">Running total</th>
-            <th scope="col">{year - 1}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {allMonths.map((m, i) => (
-            <tr key={m}>
-              <th scope="row">{monthName(m)}</th>
-              <td>{logged.has(i) ? fmt(logged.get(i)!.value) : 'not logged'}</td>
-              <td>{logged.has(i) ? fmt(logged.get(i)!.total) : ahead.has(i) ? `forecast ${fmt(ahead.get(i)!)}` : '—'}</td>
-              <td>{previous.has(i) ? fmt(previous.get(i)!.value) : '—'}</td>
+      {/* Hidden data table for screen readers. In a div: a <table> ignores sr-only's 1px size, and its rows would make the page scroll. */}
+      <div className="sr-only">
+        <table>
+          <caption>
+            {name} {year}, by month
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Month</th>
+              <th scope="col">Value</th>
+              <th scope="col">Running total</th>
+              <th scope="col">{year - 1}</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {allMonths.map((m, i) => (
+              <tr key={m}>
+                <th scope="row">{monthName(m)}</th>
+                <td>{logged.has(i) ? fmt(logged.get(i)!.value) : 'not logged'}</td>
+                <td>{logged.has(i) ? fmt(logged.get(i)!.total) : ahead.has(i) ? `forecast ${fmt(ahead.get(i)!)}` : '—'}</td>
+                <td>{previous.has(i) ? fmt(previous.get(i)!.value) : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   )
 }

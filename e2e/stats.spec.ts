@@ -121,8 +121,6 @@ async function tabTo(page: Page, target: Locator, { back = false } = {}) {
   throw new Error(`Tab never reached ${String(target)}`)
 }
 
-const moneySlider = (page: Page) => page.getByRole('slider', { name: 'Money earned 2026, choose a month' })
-
 test.describe('Stats', () => {
   test.skip(({ isMobile }) => isMobile, 'Interaction flows run on desktop; phone layout is checked below')
 
@@ -132,9 +130,9 @@ test.describe('Stats', () => {
     await expect(page.getByText('Last 30 days · compared with the period before')).toBeVisible()
     await expect(page.getByRole('region', { name: 'Tasks completed' })).toContainText('12')
     await expect(page.getByRole('region', { name: 'Task completion', exact: true })).toContainText('83%')
-    await expect(page.getByRole('region', { name: 'Reply rate', exact: true })).toContainText('30%')
-    await expect(page.getByRole('heading', { name: 'Outreach funnel' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Revenue from outreach' })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Reply rate', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Outreach funnel' })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Revenue from outreach' })).toHaveCount(0)
 
     await page.getByRole('button', { name: '7 days' }).click()
     await expect(page).toHaveURL(/range=7/)
@@ -142,120 +140,12 @@ test.describe('Stats', () => {
     await expect(page.getByRole('button', { name: '7 days' })).toHaveAttribute('aria-pressed', 'true')
   })
 
-  test('log a value → it shows in the chart and the entries table', async ({ page }) => {
-    const db = await open(page, '/stats/metrics')
-    await expect(page.getByRole('button', { name: /^Money earned/ })).toHaveAttribute('aria-pressed', 'true')
-    await expect(page.getByRole('heading', { name: 'Money earned · 2026' })).toBeVisible()
-
-    await expect(page.getByLabel('Month', { exact: true })).toHaveValue('2026-10')
-    await page.getByLabel('Amount (€) for the month').fill('2200')
-    await page.getByLabel('Note (optional)').fill('2 new clients')
-    await page.getByRole('button', { name: 'Save entry' }).click()
-
-    // Jan–Sep €11,750 + October €2,200
-    await expect(moneySlider(page)).toHaveAttribute('aria-valuetext', /^October 2026: €13,950 so far/)
-    await expect(moneySlider(page)).toHaveAttribute('aria-valuetext', /2 new clients/)
-    await expect(page.getByRole('button', { name: /^Money earned/ })).toContainText('€13,950')
-    // Entries table: month, value, change, running total, note.
-    await expect(page.getByRole('row', { name: /^October €2,200 .*€13,950 2 new clients$/ })).toBeVisible()
-    await expect
-      .poll(() => db.metric_entries?.find((e) => e.metric_id === 'm-money' && e.entry_date === '2026-10-01')?.value)
-      .toBe(2200)
-
-    // Per month: the October bar on its own.
-    await page.getByRole('button', { name: 'Per month' }).click()
-    await expect(moneySlider(page)).toHaveAttribute('aria-valuetext', /^October 2026: €2,200 this month/)
-  })
-
-  test('adds a new metric and selects it', async ({ page }) => {
-    const db = await open(page, '/stats/metrics')
-    await page.getByRole('button', { name: /New metric/ }).click()
-    await page.getByLabel('Name').fill('Kilometres run')
-    await page.getByLabel('Unit').selectOption('km')
-    await page.getByRole('button', { name: 'Create metric' }).click()
-    await expect(page.getByRole('button', { name: /^Kilometres run/ })).toHaveAttribute('aria-pressed', 'true')
-    await expect(page.getByRole('heading', { name: 'Kilometres run · 2026' })).toBeVisible()
-    await expect.poll(() => db.metrics?.some((m) => m.name === 'Kilometres run' && m.unit === 'km')).toBe(true)
-  })
-
-  test('Routine progress: pick an item, see chart, facts, reasons and months', async ({ page }) => {
-    await open(page, '/stats/routine')
-    await expect(page.getByRole('button', { name: /^Wake up at 06:00/ })).toHaveAttribute('aria-pressed', 'true')
-    await expect(page.getByRole('heading', { name: 'Wake up at 06:00 · Mon–Fri' })).toBeVisible()
-    await expect(page.getByText('Tired')).toBeVisible()
-    await expect(page.getByText(/Most misses are on Mondays/)).toBeVisible()
-    await expect(page.getByRole('row', { name: /^October 19 of 19/ })).toBeVisible()
-
-    await page.getByRole('button', { name: /^Read 20 pages/ }).click()
-    await expect(page).toHaveURL(/item=r-read/)
-    await expect(page.getByRole('heading', { name: 'Read 20 pages · Every day' })).toBeVisible()
-  })
-
-  test('Reports: month and year, Download PDF prints, Share image downloads a PNG', async ({ page }) => {
-    // No share sheet in the test browser: Share image falls back to a download.
-    await page.addInitScript(() => {
-      Object.defineProperty(navigator, 'canShare', { value: undefined, configurable: true })
-    })
-    await open(page, '/stats/reports')
-    const card = page.getByRole('group', { name: 'My October summary card' })
-    await expect(card).toBeVisible()
-    await expect(card).toContainText('outreach messages')
-    await expect(card).not.toContainText('Café Rondo')
-    // The deal's name is only in the key numbers, not on the share card.
-    await expect(page.getByText('Café Rondo')).toBeVisible()
-
-    await page.evaluate(() => {
-      const w = globalThis as unknown as { print: () => void; printed?: boolean }
-      w.print = () => {
-        w.printed = true
-      }
-    })
-    await page.getByRole('button', { name: 'Download PDF' }).click()
-    expect(await page.evaluate(() => (globalThis as unknown as { printed?: boolean }).printed)).toBe(true)
-
-    await page.getByRole('button', { name: '2026 so far' }).click()
-    await expect(page).toHaveURL(/period=year/)
-    await expect(page.getByRole('group', { name: 'My 2026 summary card' })).toBeVisible()
-
-    const download = page.waitForEvent('download')
-    await page.getByRole('button', { name: 'Share image' }).click()
-    expect((await download).suggestedFilename()).toBe('momentum-my-2026.png')
-  })
-
   test('works with the keyboard only', async ({ page }) => {
-    const db = await open(page, '/stats/overview')
+    await open(page, '/stats/overview')
 
     await tabTo(page, page.getByRole('button', { name: '90 days' }))
     await page.keyboard.press('Enter')
     await expect(page).toHaveURL(/range=90/)
-
-    await tabTo(page, page.getByRole('link', { name: 'My metrics' }))
-    await page.keyboard.press('Enter')
-    await expect(moneySlider(page)).toBeVisible()
-
-    await tabTo(page, page.getByLabel('Amount (€) for the month'))
-    await page.keyboard.type('2000')
-    await page.keyboard.press('Enter')
-    await expect
-      .poll(() => db.metric_entries?.find((e) => e.metric_id === 'm-money' && e.entry_date === '2026-10-01')?.value)
-      .toBe(2000)
-
-    // Pick a month on the chart with the arrow keys.
-    await tabTo(page, moneySlider(page), { back: true })
-    await page.keyboard.press('Home')
-    await expect(moneySlider(page)).toHaveAttribute('aria-valuetext', /^January 2026: €850 so far/)
-
-    await tabTo(page, page.getByRole('link', { name: 'Routine progress' }), { back: true })
-    await page.keyboard.press('Enter')
-    await tabTo(page, page.getByRole('button', { name: /^Read 20 pages/ }))
-    await page.keyboard.press('Enter')
-    await expect(page.getByRole('heading', { name: 'Read 20 pages · Every day' })).toBeVisible()
-
-    await tabTo(page, page.getByRole('link', { name: 'Reports' }), { back: true })
-    await page.keyboard.press('Enter')
-    await tabTo(page, page.getByRole('button', { name: '2026 so far' }))
-    await page.keyboard.press('Enter')
-    await expect(page.getByRole('group', { name: 'My 2026 summary card' })).toBeVisible()
   })
 })
 
@@ -275,25 +165,12 @@ test.describe('Stats at phone width', () => {
     expect(report.overflow, report.wide.join('\n')).toBeLessThanOrEqual(0)
   }
 
-  test('every tab fits the screen', async ({ page }) => {
+  test('Overview fits the screen, and old tab links land on it', async ({ page }) => {
     await open(page, '/stats/overview')
-    await expect(page.getByRole('heading', { name: 'Outreach funnel' })).toBeVisible()
-    await expectNoSideScroll(page)
-
-    await page.goto('/stats/metrics')
-    await expect(moneySlider(page)).toBeVisible()
-    await expectNoSideScroll(page)
-    await page.getByRole('button', { name: /New metric/ }).click()
-    await expect(page.getByRole('button', { name: 'Create metric' })).toBeVisible()
-    await expectNoSideScroll(page)
-    await page.getByRole('button', { name: 'Cancel' }).click()
-
-    await page.goto('/stats/routine')
-    await expect(page.getByRole('heading', { name: 'Wake up at 06:00 · Mon–Fri' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Outreach funnel' })).toHaveCount(0)
     await expectNoSideScroll(page)
 
     await page.goto('/stats/reports')
-    await expect(page.getByRole('group', { name: 'My October summary card' })).toBeVisible()
-    await expectNoSideScroll(page)
+    await expect(page).toHaveURL(/\/stats\/overview$/)
   })
 })

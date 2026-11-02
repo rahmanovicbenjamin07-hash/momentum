@@ -15,7 +15,7 @@ export function OutreachToolbar({ search, onSearchChange, followUpDue, onFollowU
   const id = useId()
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <div className="relative w-full sm:w-[405px]">
+      <div className="glass-input-wrap relative w-full sm:w-[405px]">
         <label htmlFor={`${id}-search`} className="sr-only">
           Search leads
         </label>
@@ -29,12 +29,12 @@ export function OutreachToolbar({ search, onSearchChange, followUpDue, onFollowU
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search name, business, notes"
-          className="pl-9"
+          className="glass-input pl-9"
         />
       </div>
       <label
         htmlFor={`${id}-due`}
-        className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm text-foreground"
+        className="glass-button inline-flex h-10 cursor-pointer items-center gap-2 border px-3 text-sm text-foreground has-focus-visible:ring-3 has-focus-visible:ring-ring/50"
       >
         <Checkbox
           id={`${id}-due`}

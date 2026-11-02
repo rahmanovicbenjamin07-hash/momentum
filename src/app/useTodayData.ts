@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useRoutineChecks, useRoutineItems } from '@/api/routine'
 import { useTasksForDate, useTasksForDates } from '@/api/tasks'
-import { weekDays, type DateKey, type WeekStartsOn } from '@/lib/dates'
+import { addDays, weekDays, type DateKey, type WeekStartsOn } from '@/lib/dates'
 import { checksRange, deriveTodayView, type TodayView } from './todayData'
 import { useUserToday } from './useUserToday'
 
@@ -28,9 +28,10 @@ export function useTodayData(selectedDay?: DateKey): TodayData {
   const checks = useRoutineChecks(range.from, range.to)
   const dayTasks = useTasksForDate(selected)
   const weekTasks = useTasksForDates(week)
+  const tomorrowTasks = useTasksForDate(addDays(today, 1))
 
   const view = useMemo(() => {
-    if (!routine.data || !checks.data || !dayTasks.data || !weekTasks.data) return undefined
+    if (!routine.data || !checks.data || !dayTasks.data || !weekTasks.data || !tomorrowTasks.data) return undefined
     return deriveTodayView({
       today,
       selected,
@@ -39,9 +40,20 @@ export function useTodayData(selectedDay?: DateKey): TodayData {
       routineItems: routine.data,
       checks: checks.data,
       checksFrom: range.from,
-      tasks: [...dayTasks.data, ...weekTasks.data],
+      tasks: [...dayTasks.data, ...weekTasks.data, ...tomorrowTasks.data],
     })
-  }, [today, selected, timeZone, weekStartsOn, routine.data, checks.data, dayTasks.data, weekTasks.data, range.from])
+  }, [
+    today,
+    selected,
+    timeZone,
+    weekStartsOn,
+    routine.data,
+    checks.data,
+    dayTasks.data,
+    weekTasks.data,
+    tomorrowTasks.data,
+    range.from,
+  ])
 
   return {
     today,
@@ -49,12 +61,13 @@ export function useTodayData(selectedDay?: DateKey): TodayData {
     timeZone,
     weekStartsOn,
     view,
-    isError: routine.isError || checks.isError || dayTasks.isError || weekTasks.isError,
+    isError: routine.isError || checks.isError || dayTasks.isError || weekTasks.isError || tomorrowTasks.isError,
     refetch: () => {
       void routine.refetch()
       void checks.refetch()
       void dayTasks.refetch()
       void weekTasks.refetch()
+      void tomorrowTasks.refetch()
     },
   }
 }

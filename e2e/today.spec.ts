@@ -71,7 +71,17 @@ async function openToday(page: Page): Promise<MockDb> {
   return db
 }
 
+/** Opens the Add task pop-up from the header and returns it. */
+async function openAddTask(page: Page): Promise<Locator> {
+  await page.getByRole('button', { name: 'Add task' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Add task' })
+  await expect(dialog).toBeVisible()
+  return dialog
+}
+
 const tasksCard = (page: Page) => page.locator('section', { has: page.getByRole('heading', { name: /Today’s tasks/ }) })
+const tomorrowCard = (page: Page) =>
+  page.locator('section', { has: page.getByRole('heading', { name: /Tomorrow’s tasks/ }) })
 
 test.describe('Today page', () => {
   test.skip(({ isMobile }) => isMobile, 'Interaction flow runs on desktop; layout is checked separately')
@@ -87,13 +97,17 @@ test.describe('Today page', () => {
     await expect(page.getByRole('region', { name: 'Current streak' })).toContainText('26')
     await expect(page.getByRole('link', { name: 'Today, 3 open tasks' })).toBeVisible()
     await expect(page.getByRole('navigation', { name: 'Main' })).toContainText('26 days')
-    await expect(page.getByRole('region', { name: 'Outreaches this week' })).toContainText('0')
+    // Only two top cards, and no task bar on the page (Add task opens a pop-up).
+    await expect(page.getByRole('region', { name: 'Outreaches this week' })).toHaveCount(0)
+    await expect(page.getByRole('form', { name: 'Add a task' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Add task' })).toBeVisible()
   })
 
   test('ticks a routine item and a task', async ({ page }) => {
     const db = await openToday(page)
 
-    await page.getByRole('checkbox', { name: 'Wake up' }).click()
+    // "Wake up" is on tomorrow's card too, so tick it in today's.
+    await tasksCard(page).getByRole('checkbox', { name: 'Wake up' }).click()
     await expect(page.getByRole('region', { name: 'Today’s progress' })).toContainText('50%')
     await expect
       .poll(() => db.routine_checks?.find((c) => c.routine_item_id === 'r-wake' && c.date === TODAY)?.done)
@@ -128,50 +142,87 @@ test.describe('Today page', () => {
     await expect.poll(() => db.tasks?.find((t) => t.id === 't-lejla')?.due_date).toBe(TODAY)
   })
 
-  test('quick-add plans a task for tomorrow; "View" opens that day', async ({ page }) => {
+  test('Add task plans a task for tomorrow; "View" opens that day', async ({ page }) => {
     const db = await openToday(page)
 
-    await page.getByRole('combobox', { name: 'Day' }).selectOption('tomorrow')
-    const text = page.getByRole('textbox', { name: 'Task' })
+    const dialog = await openAddTask(page)
+    await dialog.getByRole('combobox', { name: 'Day' }).selectOption('tomorrow')
+    const text = dialog.getByRole('textbox', { name: 'Task name' })
     await text.fill('Send invoice to Nova Dental')
     await text.press('Enter')
 
+    await expect(dialog).toBeHidden()
     await expect(page.getByText('Task added for tomorrow')).toBeVisible()
     await expect(tasksCard(page).getByText('Send invoice to Nova Dental')).toHaveCount(0)
+    await expect(tomorrowCard(page).getByText('Send invoice to Nova Dental')).toBeVisible()
     await expect.poll(() => db.tasks?.find((t) => t.title === 'Send invoice to Nova Dental')?.due_date).toBe('2026-10-29')
 
     await page.getByRole('button', { name: 'View', exact: true }).click()
     await expect(page).toHaveURL(/day=2026-10-29/)
     await expect(tasksCard(page).getByText('Send invoice to Nova Dental')).toBeVisible()
-    // Looking at tomorrow, the bar starts on Tomorrow.
-    await expect(page.getByRole('combobox', { name: 'Day' })).toHaveValue('tomorrow')
+    // Looking at tomorrow, the pop-up starts on Tomorrow.
+    const again = await openAddTask(page)
+    await expect(again.getByRole('combobox', { name: 'Day' })).toHaveValue('tomorrow')
   })
 
-  test('quick-add makes a one-off task for today and a routine item otherwise', async ({ page }) => {
+  test('"New" in the top bar opens Today with the Add task pop-up', async ({ page }) => {
+    await openToday(page)
+    await page.getByRole('link', { name: /^Settings/ }).first().click()
+    await expect(page).toHaveURL(/\/settings/)
+
+    await page.getByRole('button', { name: 'New', exact: true }).click()
+    await expect(page).toHaveURL(/\/$/)
+    const dialog = page.getByRole('dialog', { name: 'Add task' })
+    await expect(dialog.getByRole('textbox', { name: 'Task name' })).toBeFocused()
+    await page.keyboard.type('Pay rent')
+    await page.keyboard.press('Enter')
+    await expect(dialog).toBeHidden()
+    await expect(tasksCard(page).getByText('Pay rent')).toBeVisible()
+  })
+
+  test('Add task makes a one-off task, a daily and a weekly repeating one', async ({ page }) => {
     const db = await openToday(page)
 
-    const text = page.getByRole('textbox', { name: 'Task' })
-    await text.fill('Call accountant #personal !low 15:00')
-    await text.press('Enter')
+    let dialog = await openAddTask(page)
+    // Step 1 is required.
+    await dialog.getByRole('button', { name: 'Add task' }).click()
+    await expect(dialog.getByText('Type a task')).toBeVisible()
+    await dialog.getByRole('textbox', { name: 'Task name' }).fill('Call accountant #personal !low')
+    await dialog.getByLabel('Time').fill('15:00')
+    await dialog.getByRole('button', { name: 'Add task' }).click()
     await expect(page.getByText('Task added')).toBeVisible()
     await expect(tasksCard(page).getByText('Call accountant')).toBeVisible()
     await expect
       .poll(() => db.tasks?.find((t) => t.title === 'Call accountant'))
       .toMatchObject({ tag: 'personal', priority: 'low', time: '15:00:00', due_date: TODAY })
 
-    await text.fill('Stretch')
-    await page.getByRole('combobox', { name: 'Repeat' }).selectOption('weekdays')
-    await page.getByRole('button', { name: 'Add task' }).click()
-    await expect(page.getByText('Repeating task added · Mon–Fri')).toBeVisible()
+    dialog = await openAddTask(page)
+    await dialog.getByRole('textbox', { name: 'Task name' }).fill('Stretch')
+    await dialog.getByText('Every day', { exact: true }).click()
+    await expect(dialog.getByRole('combobox', { name: 'Day' })).toBeDisabled()
+    await dialog.getByRole('button', { name: 'Add task' }).click()
+    await expect(page.getByText(/^Repeating task added · /).first()).toBeVisible()
     await expect(tasksCard(page).getByText('Stretch')).toBeVisible()
-    await expect.poll(() => db.routine_items?.find((r) => r.title === 'Stretch')?.days).toEqual(WEEKDAYS)
+    await expect.poll(() => db.routine_items?.find((r) => r.title === 'Stretch')?.days).toEqual([true, true, true, true, true, true, true])
+
+    // Every week, on the chosen day's weekday: today is a Wednesday.
+    dialog = await openAddTask(page)
+    await dialog.getByRole('textbox', { name: 'Task name' }).fill('Weekly review')
+    await dialog.getByText('Every week', { exact: true }).click()
+    await expect(dialog.getByText('Shows on Today every Wednesday.')).toBeVisible()
+    await dialog.getByRole('button', { name: 'Add task' }).click()
+    await expect(tasksCard(page).getByText('Weekly review')).toBeVisible()
+    await expect
+      .poll(() => db.routine_items?.find((r) => r.title === 'Weekly review')?.days)
+      .toEqual([false, false, true, false, false, false, false])
   })
 
   test('adds a task, ticks it, and it moves to the bottom', async ({ page }) => {
     const db = await openToday(page)
     const rows = tasksCard(page).getByRole('list', { name: 'Tasks' }).getByRole('listitem')
 
-    const text = page.getByRole('textbox', { name: 'Task' })
+    const dialog = await openAddTask(page)
+    const text = dialog.getByRole('textbox', { name: 'Task name' })
     await text.fill('Buy printer ink')
     await text.press('Enter')
 
@@ -201,13 +252,15 @@ test.describe('Today page', () => {
     await page.keyboard.press('Tab')
     await expect(page.getByRole('link', { name: 'Skip to content' })).toBeFocused()
 
-    // Add a task with the keyboard; the field stays focused for the next one.
-    const text = page.getByRole('textbox', { name: 'Task' })
-    await tabTo(text)
+    // Add a task with the keyboard: the pop-up opens with the cursor in the name; afterwards focus is back on the button.
+    const addButton = page.getByRole('button', { name: 'Add task' })
+    await tabTo(addButton)
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('textbox', { name: 'Task name' })).toBeFocused()
     await page.keyboard.type('Water plants')
     await page.keyboard.press('Enter')
     await expect(tasksCard(page).getByText('Water plants')).toBeVisible()
-    await expect(text).toBeFocused()
+    await expect(addButton).toBeFocused()
 
     // Tick it with Space; focus follows the row to the bottom.
     const checkbox = page.getByRole('checkbox', { name: 'Water plants' })
@@ -226,7 +279,8 @@ test.describe('Today page', () => {
 
     await page.keyboard.press('Enter')
     await expect(page.getByText('Overdue · 1')).toBeHidden()
-    await expect(tasksCard(page).getByRole('button', { name: /^All/ })).toBeFocused()
+    // The block is gone, so focus goes to the next control: the arrow on Today's tasks.
+    await expect(tasksCard(page).getByRole('button', { name: /Today’s tasks/ })).toBeFocused()
     await expect.poll(() => db.tasks?.find((t) => t.id === 't-lejla')?.due_date).toBe(TODAY)
 
     // Ctrl+K jumps to search from anywhere.
@@ -234,8 +288,23 @@ test.describe('Today page', () => {
     await expect(page.getByRole('searchbox', { name: 'Search' })).toBeFocused()
   })
 
-  test('filters and edits repeating items', async ({ page }) => {
-    const db = await openToday(page)
+  test('folds a task card with its arrow and remembers it', async ({ page }) => {
+    await openToday(page)
+    const arrow = tasksCard(page).getByRole('button', { name: /Today’s tasks/ })
+
+    await arrow.click()
+    await expect(arrow).toHaveAttribute('aria-expanded', 'false')
+    await expect(tasksCard(page).getByRole('list', { name: 'Tasks' })).toBeHidden()
+    await expect(tomorrowCard(page).getByText('Wake up')).toBeVisible()
+
+    await page.reload()
+    await expect(arrow).toHaveAttribute('aria-expanded', 'false')
+    await arrow.click()
+    await expect(tasksCard(page).getByText('Wake up')).toBeVisible()
+  })
+
+  test('filters repeating and one-off items', async ({ page }) => {
+    await openToday(page)
     const card = tasksCard(page)
 
     await card.getByRole('button', { name: /^Repeating/ }).click()
@@ -245,13 +314,6 @@ test.describe('Today page', () => {
     await expect(card.getByText('Follow up with Emir')).toBeVisible()
     await expect(card.getByText('Wake up')).toBeHidden()
 
-    await card.getByRole('button', { name: 'Edit repeating' }).click()
-    await card.getByRole('group', { name: 'Days for Wake up' }).getByRole('button', { name: 'Saturday' }).click()
-    await expect.poll(() => db.routine_items?.find((r) => r.id === 'r-wake')?.days).toEqual([true, true, true, true, true, true, false])
-
-    await card.getByRole('button', { name: 'Remove Read 20 pages' }).click()
-    await expect.poll(() => db.routine_items?.find((r) => r.id === 'r-read')?.active).toBe(false)
-    await expect(card.getByText('Read 20 pages')).toBeHidden()
   })
 
   test('deletes a one-off task with Undo, and asks before removing a repeating one', async ({ page }) => {
@@ -330,7 +392,7 @@ test.describe('Today page', () => {
     await page.getByRole('textbox', { name: 'Daily note' }).blur()
     await expect.poll(() => db.daily_logs?.find((l) => l.date === TODAY)?.note).toBe('Good focus before lunch')
 
-    await page.getByRole('button', { name: 'Energy 2 of 5' }).click()
+    await page.getByRole('slider', { name: 'Energy' }).fill('2')
     await expect.poll(() => db.daily_logs?.find((l) => l.date === TODAY)?.energy).toBe(2)
   })
 
@@ -342,7 +404,7 @@ test.describe('Today page', () => {
     await expect(page).toHaveURL(/day=2026-10-27/)
     await expect(page.getByText('Yesterday you missed')).toBeHidden()
 
-    await page.getByRole('button', { name: 'Back to today' }).click()
+    await page.getByRole('button', { name: 'Back to today', exact: true }).click()
     await expect(page.getByText('Wednesday, 28 October 2026')).toBeVisible()
   })
 })

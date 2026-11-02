@@ -79,6 +79,9 @@ export function CompletionLineChart({ points, title = 'Task completion per day' 
 
   // Three date labels under the axis: first, middle, last.
   const dateTicks = n === 0 ? [] : [...new Set([0, Math.floor((n - 1) / 2), n - 1])]
+  // Vertical grid: every day when there's room, otherwise every Monday.
+  const everyDay = n > 1 && plotW / (n - 1) >= 16
+  const gridDays = points.flatMap((p, i) => (everyDay || parseISO(p.date).getDay() === 1 ? [i] : []))
 
   return (
     <section aria-labelledby={`${id}-title`} className="rounded-xl border border-border bg-card p-5">
@@ -125,6 +128,9 @@ export function CompletionLineChart({ points, title = 'Task completion per day' 
               onPointerDown={pick}
               onPointerLeave={() => setActive(null)}
             >
+              {gridDays.map((i) => (
+                <line key={i} x1={x(i)} x2={x(i)} y1={PAD.top} y2={PAD.top + plotH} stroke={CHART.gridFaint} />
+              ))}
               {TICKS.map((t) => (
                 <g key={t}>
                   <line
@@ -212,25 +218,28 @@ export function CompletionLineChart({ points, title = 'Task completion per day' 
 
       </div>
 
-      <table className="sr-only">
-        <caption>{title}</caption>
-        <thead>
-          <tr>
-            <th scope="col">Day</th>
-            <th scope="col">Daily</th>
-            <th scope="col">7-day average</th>
-          </tr>
-        </thead>
-        <tbody>
-          {points.map((p) => (
-            <tr key={p.date}>
-              <th scope="row">{dayLabel(p.date)}</th>
-              <td>{valueText(p.daily)}</td>
-              <td>{valueText(p.average)}</td>
+      {/* Hidden data table for screen readers. In a div: a <table> ignores sr-only's 1px size, and its rows would make the page scroll. */}
+      <div className="sr-only">
+        <table>
+          <caption>{title}</caption>
+          <thead>
+            <tr>
+              <th scope="col">Day</th>
+              <th scope="col">Daily</th>
+              <th scope="col">7-day average</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {points.map((p) => (
+              <tr key={p.date}>
+                <th scope="row">{dayLabel(p.date)}</th>
+                <td>{valueText(p.daily)}</td>
+                <td>{valueText(p.average)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   )
 }

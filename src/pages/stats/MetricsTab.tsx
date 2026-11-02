@@ -65,10 +65,6 @@ export default function MetricsTab() {
         actions={<YearSelect value={year} years={years} onChange={(y) => setYear(y === years[0] ? null : String(y))} />}
       />
       <Tabs />
-      <p className="mb-4 text-sm text-ink-2">
-        Numbers you write down yourself — money, trainings, hours, anything. Log a value, and the chart shows how the year
-        adds up and whether it is speeding up or slowing down.
-      </p>
 
       {failed ? (
         <LoadError

@@ -32,7 +32,7 @@ export function UserMenu({ user, onSignOut }: UserMenuProps) {
       >
         {initials}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-60">
+      <DropdownMenuContent align="end" className="glass-menu w-60">
         <DropdownMenuLabel className="flex flex-col gap-0.5">
           {user.name && <span className="truncate text-sm font-semibold text-foreground">{user.name}</span>}
           <span className="truncate text-xs font-normal text-ink-3">{user.email}</span>

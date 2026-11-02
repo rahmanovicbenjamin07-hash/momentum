@@ -4,25 +4,16 @@ import { Link } from 'react-router'
 import { MeterBar } from '@/components/MeterBar'
 import type { WeekProgress } from '@/lib/progress'
 import { WEEKDAY_NAMES, WEEKDAY_SHORT } from '@/lib/today-list'
-import { weekCellTone, weekSoFarLabel, type WeekCellTone } from '@/lib/todayCards'
-
-const TONE_CLASSES: Record<WeekCellTone, string> = {
-  empty: 'bg-muted text-transparent',
-  low: 'bg-brand-tint text-brand',
-  mid: 'bg-week-mid text-week-mid-text',
-  high: 'bg-brand text-white',
-  top: 'bg-week-top text-week-top-text',
-}
+import { weekSoFarLabel } from '@/lib/todayCards'
 
 type ThisWeekCardProps = {
   week: WeekProgress
-  outreach: { sent: number; goal: number }
   /** Where the "Stats" link goes. */
   statsHref?: string
 }
 
-/** "This week" side card: week %, counts and a 7-day strip (darker = more done). */
-export function ThisWeekCard({ week, outreach, statsHref = '/stats' }: ThisWeekCardProps) {
+/** "This week" side card: week %, counts and one progress bar per day, Monday to Sunday. */
+export function ThisWeekCard({ week, statsHref = '/stats' }: ThisWeekCardProps) {
   const titleId = useId()
 
   return (
@@ -55,35 +46,27 @@ export function ThisWeekCard({ week, outreach, statsHref = '/stats' }: ThisWeekC
             {week.routine.done}/{week.routine.total}
           </dd>
         </div>
-        <div className="flex gap-1">
-          <dt>Outreaches</dt>
-          <dd className="font-semibold text-foreground">
-            {outreach.sent}/{outreach.goal}
-          </dd>
-        </div>
       </dl>
 
-      <ol aria-label="Days this week" className="mt-3 grid grid-cols-7 gap-1.5">
+      <ol aria-label="Days this week" className="mt-4 flex flex-col gap-2.5">
         {week.days.map((day, i) => {
-          const tone = weekCellTone(day.percent)
           const spoken = day.isFuture ? 'not yet' : day.percent === null ? 'nothing planned' : `${day.percent}% done`
+          const shown = !day.isFuture && day.percent !== null
           return (
-            <li key={day.date} className="flex flex-col items-center gap-1">
-              <span
-                aria-hidden="true"
-                className={cn(
-                  'grid h-9 w-full place-items-center rounded-lg text-[11px] font-semibold',
-                  TONE_CLASSES[tone],
-                  day.isToday && 'ring-2 ring-brand ring-inset',
+            <li key={day.date} className="flex items-center gap-3 text-xs">
+              <span aria-hidden="true" className={cn('w-8 shrink-0', day.isToday ? 'font-bold text-foreground' : 'text-ink-2')}>
+                {WEEKDAY_SHORT[i]}
+              </span>
+              <span aria-hidden="true" className="h-1.5 flex-1 overflow-hidden rounded-lg bg-brand-tint">
+                {shown && (
+                  <span className="block h-full rounded-lg bg-brand transition-[width]" style={{ width: `${day.percent}%` }} />
                 )}
-              >
-                {day.percent === null ? '' : `${day.percent}%`}
               </span>
               <span
                 aria-hidden="true"
-                className={cn('text-xs', day.isToday ? 'font-bold text-foreground' : 'text-ink-2')}
+                className={cn('w-9 shrink-0 text-right tabular-nums', day.isToday ? 'font-bold text-foreground' : shown ? 'font-semibold text-foreground' : 'text-ink-3')}
               >
-                {WEEKDAY_SHORT[i]}
+                {shown ? `${day.percent}%` : '—'}
               </span>
               <span className="sr-only">
                 {WEEKDAY_NAMES[i]}

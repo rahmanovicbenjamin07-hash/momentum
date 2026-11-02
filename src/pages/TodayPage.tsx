@@ -1,6 +1,6 @@
 import { Loader2 } from 'lucide-react'
 import { useRef, useState } from 'react'
-import { useSearchParams } from 'react-router'
+import { useLocation, useNavigate, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 import { useDailyLog, useSaveDailyLog } from '@/api/dailyLog'
 import {
@@ -8,21 +8,18 @@ import {
   useRemoveRoutineItem,
   useSetMissReason,
   useToggleRoutineCheck,
-  useUpdateRoutineItem,
 } from '@/api/routine'
 import { useContacts, useUpdateContact } from '@/api/contacts'
 import { useCreateTask, useDeleteTask, useDropTask, useMoveToToday, useOverdueTasks, useToggleTask } from '@/api/tasks'
 import { keepFocusPlace } from '@/app/keepFocusPlace'
-import { useOutreachWeek } from '@/app/useOutreachWeek'
 import { useTodayData } from '@/app/useTodayData'
 import { EmptyState } from '@/components/EmptyState'
 import { StreakCard } from '@/components/streak/StreakCard'
+import { AddTaskDialog } from '@/components/today/AddTaskDialog'
 import { DailyNoteCard } from '@/components/today/DailyNoteCard'
 import { MissedYesterday } from '@/components/today/MissedYesterday'
-import { OutreachWeekCard } from '@/components/today/OutreachWeekCard'
 import { OverdueBlock, type OverdueTask } from '@/components/today/OverdueBlock'
 import { ProgressCard } from '@/components/today/ProgressCard'
-import { QuickAddBar } from '@/components/today/QuickAddBar'
 import { ThisWeekCard } from '@/components/today/ThisWeekCard'
 import { TodayHeader } from '@/components/today/TodayHeader'
 import { TodayLayout } from '@/components/today/TodayLayout'
@@ -32,7 +29,7 @@ import { addDays, formatDate, isDateKey, type DateKey } from '@/lib/dates'
 import type { QuickAddResult } from '@/lib/quickAddSubmit'
 import { formatDays } from '@/lib/todayList'
 import type { Contact } from '@/schemas/outreach'
-import type { Task } from '@/schemas/today'
+import type { Task, TodayItem } from '@/schemas/today'
 
 /** A row in the Overdue block: a late task, or a lead whose follow-up date has passed. */
 type OverdueItem = OverdueTask & ({ kind: 'task'; task: Task } | { kind: 'followUp'; contact: Contact })
@@ -54,6 +51,26 @@ function overdueItems(tasks: readonly Task[], contacts: readonly Contact[], toda
   }
   // Oldest first; the sort is stable, so tasks keep their own order within a day.
   return late.sort((a, b) => a.due_date.localeCompare(b.due_date))
+}
+
+type TaskCard = 'today' | 'tomorrow'
+
+/** Whether a task card was folded up last time (remembered per device). */
+function readCollapsed(card: TaskCard): boolean {
+  try {
+    return localStorage.getItem(`momentum:collapsed-${card}-tasks`) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeCollapsed(card: TaskCard, collapsed: boolean) {
+  try {
+    if (collapsed) localStorage.setItem(`momentum:collapsed-${card}-tasks`, '1')
+    else localStorage.removeItem(`momentum:collapsed-${card}-tasks`)
+  } catch {
+    // Storage blocked (private mode): the card just opens again after a reload.
+  }
 }
 
 const DISMISS_KEY = 'momentum:missed-dismissed'
@@ -81,22 +98,23 @@ function dateFromKey(key: DateKey): Date {
 
 export default function TodayPage() {
   const [params, setParams] = useSearchParams()
+  const navigate = useNavigate()
+  // The top bar's "New" button sends { quickAdd: <time> } to open the Add task pop-up.
+  const quickAddRequest = (useLocation().state as { quickAdd?: number } | null)?.quickAdd
   const dayParam = params.get('day')
-  const { today, selected, timeZone, weekStartsOn, view, isError, refetch } = useTodayData(
+  const { today, selected, timeZone, view, isError, refetch } = useTodayData(
     dayParam && isDateKey(dayParam) ? dayParam : undefined,
   )
   const isToday = selected === today
 
   const overdue = useOverdueTasks(today)
   const contacts = useContacts()
-  const outreachWeek = useOutreachWeek(today, timeZone, weekStartsOn)
   const dailyLog = useDailyLog(selected)
 
   const toggleCheck = useToggleRoutineCheck()
   const toggleTask = useToggleTask()
   const createTask = useCreateTask()
   const createRoutine = useCreateRoutineItem()
-  const updateRoutine = useUpdateRoutineItem()
   const removeRoutine = useRemoveRoutineItem()
   const setMissReason = useSetMissReason()
   const moveToToday = useMoveToToday()
@@ -106,9 +124,32 @@ export default function TodayPage() {
   const updateContact = useUpdateContact()
 
   const [dismissedMissed, setDismissedMissed] = useState(readDismissed)
+  const [addOpen, setAddOpen] = useState(false)
+  // Each "New" click sends a new request: open the pop-up once per request (also when arriving from another page).
+  const [seenRequest, setSeenRequest] = useState<number | undefined>(undefined)
+  if (quickAddRequest !== seenRequest) {
+    setSeenRequest(quickAddRequest)
+    if (quickAddRequest) setAddOpen(true)
+  }
   // Main column, so focus can stay in place when a banner, overdue row or routine item goes away.
   const mainRef = useRef<HTMLDivElement>(null)
   const keepFocus = () => keepFocusPlace(mainRef.current)
+
+  function handleToggle(item: TodayItem, done: boolean, date: DateKey) {
+    if (item.kind === 'routine') toggleCheck.mutate({ routineItemId: item.id, date, done })
+    else toggleTask.mutate({ id: item.id, done })
+  }
+
+  function handleRemoveRoutine(id: string) {
+    keepFocus()
+    removeRoutine.mutate(id, { onSuccess: () => toast('Repeating task removed') })
+  }
+
+  function handleDeleteTask(item: TodayItem) {
+    keepFocus()
+    const undo = deleteTask.remove(item.id)
+    if (undo) toast('Task deleted', { duration: 5000, action: { label: 'Undo', onClick: undo } })
+  }
 
   function goTo(day: DateKey) {
     setParams(day === today ? {} : { day }, { replace: true })
@@ -138,20 +179,35 @@ export default function TodayPage() {
         toast.success(`Repeating task added · ${formatDays(result.days)}`)
       }
     } catch {
-      // The hook already showed an error toast and undid the change; keep the text so it can be retried.
-      throw new Error("Couldn't save it. Your text is still here, so try again.")
+      // The hook already showed an error toast and undid the change; keep the pop-up open so it can be retried.
+      throw new Error("Couldn't save it. Your task is still here, so try again.")
     }
   }
 
+  // Header + the Add task pop-up it opens (shown in every state, also while loading).
   const header = (
-    <TodayHeader
-      date={dateFromKey(selected)}
-      timeZone={timeZone}
-      onPrevDay={() => goTo(addDays(selected, -1))}
-      onToday={() => goTo(today)}
-      onNextDay={() => goTo(addDays(selected, 1))}
-      onWeekView={() => toast('Week view is coming in a later phase.')}
-    />
+    <>
+      <TodayHeader
+        date={dateFromKey(selected)}
+        today={today}
+        timeZone={timeZone}
+        onPrevDay={() => goTo(addDays(selected, -1))}
+        onToday={() => goTo(today)}
+        onNextDay={() => goTo(addDays(selected, 1))}
+        onWeekView={() => navigate(isToday ? '/week' : `/week?start=${selected}`)}
+        onAddTask={() => setAddOpen(true)}
+      />
+      <AddTaskDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        today={today}
+        viewedDay={selected}
+        onSubmit={async (result) => {
+          await handleQuickAdd(result)
+          setAddOpen(false)
+        }}
+      />
+    </>
   )
 
   if (isError) {
@@ -187,10 +243,8 @@ export default function TodayPage() {
           <>
             <ProgressCard progress={view.progress} />
             <StreakCard days={view.streak.days} />
-            <OutreachWeekCard {...outreachWeek} />
           </>
         }
-        quickAdd={<QuickAddBar key={selected} onSubmit={handleQuickAdd} today={today} viewedDay={selected} />}
         main={
           <div ref={mainRef} className="contents">
             {!isToday && (
@@ -248,29 +302,28 @@ export default function TodayPage() {
             )}
             <TodayTasksCard
               items={view.items}
-              routineItems={view.routineItems}
-              onToggle={(item, done) =>
-                item.kind === 'routine'
-                  ? toggleCheck.mutate({ routineItemId: item.id, date: selected, done })
-                  : toggleTask.mutate({ id: item.id, done })
-              }
-              onChangeDays={(id, days) => updateRoutine.mutate({ id, days })}
-              onChangeTime={(id, time) => updateRoutine.mutate({ id, time })}
-              onRemove={(id) => {
-                keepFocus()
-                removeRoutine.mutate(id, { onSuccess: () => toast('Repeating task removed') })
-              }}
-              onDeleteTask={(item) => {
-                keepFocus()
-                const undo = deleteTask.remove(item.id)
-                if (undo) toast('Task deleted', { duration: 5000, action: { label: 'Undo', onClick: undo } })
-              }}
+              onToggle={(item, done) => handleToggle(item, done, selected)}
+              onRemove={handleRemoveRoutine}
+              onDeleteTask={handleDeleteTask}
+              defaultCollapsed={readCollapsed('today')}
+              onCollapsedChange={(collapsed) => writeCollapsed('today', collapsed)}
             />
+            {isToday && (
+              <TodayTasksCard
+                day="tomorrow"
+                items={view.tomorrowItems}
+                onToggle={(item, done) => handleToggle(item, done, addDays(today, 1))}
+                onRemove={handleRemoveRoutine}
+                onDeleteTask={handleDeleteTask}
+                defaultCollapsed={readCollapsed('tomorrow')}
+                onCollapsedChange={(collapsed) => writeCollapsed('tomorrow', collapsed)}
+              />
+            )}
           </div>
         }
         aside={
           <>
-            <ThisWeekCard week={view.week} outreach={outreachWeek} />
+            <ThisWeekCard week={view.week} />
             {dailyLog.isSuccess ? (
               <DailyNoteCard
                 key={selected}

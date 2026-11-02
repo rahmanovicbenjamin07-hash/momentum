@@ -3,7 +3,8 @@
  * backup before restoring it, and read metric values from a CSV file.
  */
 import type { ZodType } from 'zod'
-import { goalSchema, goalUpdateSchema } from '@/schemas/goals'
+import { financeEntrySchema, financeSettingsSchema } from '@/schemas/finance'
+import { checkinSchema, goalSchema, goalUpdateSchema, milestoneSchema, objectiveSchema } from '@/schemas/goals'
 import { experimentSchema, ideaSchema, lessonSchema, reviewSchema } from '@/schemas/improve'
 import { contactSchema, stageHistorySchema, templateSchema, touchSchema } from '@/schemas/outreach'
 import { notificationPrefSchema } from '@/schemas/settings'
@@ -24,13 +25,18 @@ export const EXPORT_TABLES = [
   'templates',
   'metrics',
   'metric_entries',
+  'objectives',
   'goals',
   'goal_updates',
+  'goal_milestones',
+  'objective_checkins',
   'reviews',
   'lessons',
   'experiments',
   'ideas',
   'notification_prefs',
+  'finance_entries',
+  'finance_settings',
 ] as const
 export type ExportTable = (typeof EXPORT_TABLES)[number]
 
@@ -49,13 +55,18 @@ const ROW_SCHEMAS: Record<ExportTable, ZodType> = {
   templates: templateSchema,
   metrics: metricSchema,
   metric_entries: metricEntrySchema,
+  objectives: objectiveSchema,
   goals: goalSchema,
   goal_updates: goalUpdateSchema,
+  goal_milestones: milestoneSchema,
+  objective_checkins: checkinSchema,
   reviews: reviewSchema,
   lessons: lessonSchema,
   experiments: experimentSchema,
   ideas: ideaSchema,
   notification_prefs: notificationPrefSchema,
+  finance_entries: financeEntrySchema,
+  finance_settings: financeSettingsSchema,
 }
 
 export const EXPORT_APP = 'momentum'

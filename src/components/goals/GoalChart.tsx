@@ -122,11 +122,14 @@ export function GoalChart({ chart, formatY, formatTick = formatY }: GoalChartPro
           )
         })}
 
-        {/* Month labels */}
+        {/* Month grid lines and labels */}
         {monthTicks(start, chart.xMax).map((tick) => (
-          <text key={tick.date} x={x(tick.date)} y={bottom + 18} textAnchor={anchor(x(tick.date), 24)} className="fill-ink-2">
-            {tick.label}
-          </text>
+          <g key={tick.date}>
+            <line x1={x(tick.date)} x2={x(tick.date)} y1={PAD.top} y2={bottom} className="stroke-border/70" />
+            <text x={x(tick.date)} y={bottom + 18} textAnchor={anchor(x(tick.date), 24)} className="fill-ink-2">
+              {tick.label}
+            </text>
+          </g>
         ))}
 
         {/* Today */}

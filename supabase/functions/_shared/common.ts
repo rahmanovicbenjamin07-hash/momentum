@@ -16,13 +16,18 @@ export const EXPORT_TABLES = [
   'templates',
   'metrics',
   'metric_entries',
+  'objectives',
   'goals',
   'goal_updates',
+  'goal_milestones',
+  'objective_checkins',
   'reviews',
   'lessons',
   'experiments',
   'ideas',
   'notification_prefs',
+  'finance_entries',
+  'finance_settings',
 ] as const
 export type ExportTable = (typeof EXPORT_TABLES)[number]
 export type Row = Record<string, unknown>

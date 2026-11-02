@@ -8,7 +8,7 @@ export function StreakMini({ days }: { days: number }) {
   const level = streakLevelForDays(safeDays)
 
   return (
-    <div data-level={level.id} className="rounded-xl border border-border px-4 py-3">
+    <div data-level={level.id} className="flame-hover glass-panel rounded-xl border border-border px-4 py-3">
       <p className="flex items-center gap-1.5 text-[13px] font-semibold" style={{ color: level.textColor }}>
         <Flame level={level.id} circle={false} size={16} />
         Current streak

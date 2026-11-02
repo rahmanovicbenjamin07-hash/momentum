@@ -25,7 +25,8 @@ export function defaultQuickAddDay(viewed: DateKey, today: DateKey): { day: Quic
 
 /**
  * Turns validated form values into a task or routine item.
- * The time field wins over a time typed in the text. Repeating items have no tag, priority or day.
+ * The time field wins over a time typed in the text. Repeating items have no tag, priority or day;
+ * "every week" uses the chosen day's weekday.
  */
 export function buildQuickAdd(values: QuickAddFormValues, today: DateKey = getToday()): QuickAddOutcome {
   const parsed = parseQuickAdd(values.text)
@@ -47,5 +48,6 @@ export function buildQuickAdd(values: QuickAddFormValues, today: DateKey = getTo
       },
     }
   }
-  return { ok: true, value: { kind: 'routine', title: parsed.title, time, days: repeatToDays(values.repeat) } }
+  const days = repeatToDays(values.repeat, quickAddDueDate(values.day, values.date, today))
+  return { ok: true, value: { kind: 'routine', title: parsed.title, time, days } }
 }

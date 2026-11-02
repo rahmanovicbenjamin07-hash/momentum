@@ -303,11 +303,9 @@ test.describe('Outreach', () => {
     expect(contactRow(db, 'Emir Kovač')?.won_amount).toBe(1800)
   })
 
-  test('Today shows this week’s outreach, late follow-ups and the sidebar badge', async ({ page }) => {
+  test('Today shows late follow-ups and the sidebar badge', async ({ page }) => {
     const db = await open(page, '/')
     await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible()
-    // Sent this week: Emir (26 Oct) and Nova (27 Oct); one reply.
-    await expect(page.getByRole('region', { name: 'Outreaches this week' })).toContainText('2of 20 goal')
     await expect(page.getByRole('link', { name: 'Outreach, 3 due' })).toBeVisible()
 
     const overdue = page.locator('section', { has: page.getByRole('heading', { name: /^Overdue/ }) })

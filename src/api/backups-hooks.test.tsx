@@ -4,7 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { AuthContext } from '@/app/auth-context'
-import { backupLabel, toBackups, useBackups, useDeleteAccount, useRestoreBackup } from './backups'
+import { backupLabel, toBackups, useBackups, useDeleteAccount, useResetAllData, useRestoreBackup } from './backups'
 
 const USER_ID = '0b7e8c1d-2f3a-4b5c-9d6e-7f8091a2b3c4'
 
@@ -12,12 +12,18 @@ const fake = vi.hoisted(() => ({
   list: vi.fn<(folder: string, options: unknown) => Promise<{ data: unknown[]; error: null }>>(),
   invoke: vi.fn<(name: string, options: unknown) => Promise<{ data: unknown; error: unknown }>>(),
   signOut: vi.fn<(options: unknown) => Promise<{ error: null }>>(),
+  prefs: vi.fn<(column: string, value: string) => Promise<{ data: unknown[] | null; error: unknown }>>(),
+  rpc: vi.fn<(name: string, args: unknown) => Promise<{ data: unknown; error: unknown }>>(),
 }))
 vi.mock('@/lib/supabase', () => ({
   supabase: {
     storage: { from: () => ({ list: fake.list }) },
     functions: { invoke: fake.invoke },
     auth: { signOut: fake.signOut },
+    from: (table: string) => ({
+      select: () => ({ eq: (column: string, value: string) => (table === 'notification_prefs' ? fake.prefs(column, value) : null) }),
+    }),
+    rpc: fake.rpc,
   },
 }))
 vi.mock('sonner', () => ({ toast: { error: vi.fn<(message: string) => void>() } }))
@@ -97,6 +103,30 @@ describe('backup hooks', () => {
     expect(fake.invoke).toHaveBeenCalledWith('restore', { body: { path: `${USER_ID}/2026-10-28.json` } })
     expect(result.current.data).toEqual({ restoredTables: 12, rows: 681 })
     expect(invalidate).toHaveBeenCalledWith()
+  })
+
+  it('resets all data but hands back the notification settings, then clears the cache', async () => {
+    const prefs = [{ id: 'p1', user_id: USER_ID, kind: 'daily' }]
+    fake.prefs.mockResolvedValue({ data: prefs, error: null })
+    fake.rpc.mockResolvedValue({ data: { restoredTables: 1, rows: 1 }, error: null })
+    const { wrapper, queryClient } = setup()
+    const reset = vi.spyOn(queryClient, 'resetQueries')
+    const { result } = renderHook(() => useResetAllData(), { wrapper })
+    act(() => result.current.mutate())
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(fake.prefs).toHaveBeenCalledWith('user_id', USER_ID)
+    expect(fake.rpc).toHaveBeenCalledWith('restore_user_data', { p_tables: { notification_prefs: prefs } })
+    expect(reset).toHaveBeenCalledWith()
+  })
+
+  it('does not reset when the notification settings cannot be read', async () => {
+    fake.rpc.mockClear()
+    fake.prefs.mockResolvedValue({ data: null, error: new Error('offline') })
+    const { wrapper } = setup()
+    const { result } = renderHook(() => useResetAllData(), { wrapper })
+    act(() => result.current.mutate())
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(fake.rpc).not.toHaveBeenCalled()
   })
 
   it('deletes the account, then signs out locally', async () => {

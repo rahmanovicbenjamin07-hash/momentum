@@ -7,13 +7,11 @@ describe('TodayLayout', () => {
     render(
       <TodayLayout
         topCards={<div>Top cards</div>}
-        quickAdd={<div>Quick add</div>}
         main={<div>Main</div>}
         aside={<div>Aside</div>}
       />,
     )
     expect(screen.getByRole('region', { name: 'Overview' })).toHaveTextContent('Top cards')
-    expect(screen.getByText('Quick add')).toBeInTheDocument()
     expect(screen.getByText('Main')).toBeInTheDocument()
     expect(screen.getByRole('complementary')).toHaveTextContent('Aside')
   })

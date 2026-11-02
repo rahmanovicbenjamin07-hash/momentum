@@ -1,6 +1,6 @@
 import { PageHeader } from '@/components/PageHeader'
 
-/** "Reminders, look and feel, your data and connected apps" / Settings. */
+/** "Settings" page title. */
 export function SettingsHeader() {
-  return <PageHeader eyebrow="Reminders, look and feel, your data and connected apps" title="Settings" />
+  return <PageHeader title="Settings" />
 }
