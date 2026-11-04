@@ -4,21 +4,13 @@ import { TodayLayout } from './TodayLayout'
 
 describe('TodayLayout', () => {
   it('renders every slot, with the aside as its own landmark', () => {
-    render(
-      <TodayLayout
-        topCards={<div>Top cards</div>}
-        main={<div>Main</div>}
-        aside={<div>Aside</div>}
-      />,
-    )
-    expect(screen.getByRole('region', { name: 'Overview' })).toHaveTextContent('Top cards')
+    render(<TodayLayout main={<div>Main</div>} aside={<div>Aside</div>} />)
     expect(screen.getByText('Main')).toBeInTheDocument()
-    expect(screen.getByRole('complementary')).toHaveTextContent('Aside')
+    expect(screen.getByRole('complementary', { name: 'Progress, week and notes' })).toHaveTextContent('Aside')
   })
 
-  it('leaves out empty optional slots', () => {
+  it('leaves out an empty aside', () => {
     render(<TodayLayout main={<div>Main</div>} />)
-    expect(screen.queryByRole('region', { name: 'Overview' })).toBeNull()
     expect(screen.queryByRole('complementary')).toBeNull()
   })
 })
