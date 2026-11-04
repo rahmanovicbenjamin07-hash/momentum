@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { cn } from 'cn'
 import { CircleX, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { TimeInput } from '@/components/ui/time-input'
 import { toHHMM, WEEKDAY_LETTERS, WEEKDAY_NAMES } from '@/lib/today-list'
 import type { RoutineItem } from '@/schemas/today'
 
@@ -110,32 +111,29 @@ function RoutineEditorRow({ item, onChangeDays, onChangeTime, onRemove }: Routin
 }
 
 /**
- * Time input that saves on blur or Enter, not on every keystroke,
- * so a half-typed time never wipes the saved one.
+ * 24-hour time box that saves on blur or Enter, not on every keystroke,
+ * so a half-typed time never wipes the saved one (something that isn't a time goes back).
  */
 function TimeField({ title, time, onCommit }: { title: string; time: string | null; onCommit: (time: string | null) => void }) {
   const inputRef = useRef<HTMLInputElement>(null)
+  /** Last value sent, so Enter followed by leaving the box saves once. */
+  const sent = useRef(time)
 
-  function commit(value: string) {
-    const next = value === '' ? null : value
-    if (next !== time) onCommit(next)
+  function commit(next: string | null) {
+    if (next === sent.current) return
+    sent.current = next
+    onCommit(next)
   }
 
   return (
     <div className="relative">
-      <input
+      <TimeInput
         ref={inputRef}
-        type="time"
         defaultValue={time ?? ''}
         aria-label={`Time for ${title}`}
-        onBlur={(e) => commit(e.currentTarget.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur()
-        }}
-        className={cn(
-          'h-9 w-[152px] rounded-lg border border-input bg-card pl-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
-          time ? 'pr-8' : 'pr-2',
-        )}
+        onCommit={commit}
+        className="w-[120px]"
+        inputClassName={cn('h-9', time ? 'pr-8' : 'pr-2')}
       />
       {time && (
         <button
@@ -143,7 +141,7 @@ function TimeField({ title, time, onCommit }: { title: string; time: string | nu
           aria-label={`Clear time for ${title}`}
           onClick={() => {
             if (inputRef.current) inputRef.current.value = ''
-            onCommit(null)
+            commit(null)
           }}
           className="absolute top-1/2 right-1.5 grid size-6 -translate-y-1/2 place-items-center rounded-md text-ink-3 outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
         >

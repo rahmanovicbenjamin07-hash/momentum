@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from 'react'
 import { cn } from 'cn'
-import { Input } from '@/components/ui/input'
+import { TimeInput } from '@/components/ui/time-input'
 import { ToggleSwitch } from './ToggleSwitch'
 
 type SettingRowProps = {
@@ -20,7 +20,7 @@ type SettingRowProps = {
   badge?: ReactNode
 }
 
-const timeClass = 'h-9 w-[110px] bg-card tabular-nums'
+const timeClass = 'w-[110px]'
 
 /** One settings line: title + faint subtitle on the left; optional time and a switch on the right. */
 export function SettingRow({
@@ -53,26 +53,29 @@ export function SettingRow({
         {badge}
         {time !== undefined && (
           <div className="flex items-center gap-1.5">
-            <Input
-              type="time"
+            {/* 24-hour; saved on blur / Enter. Keyed by the saved time so it shows a change from elsewhere. */}
+            <TimeInput
+              key={time ?? ''}
               className={timeClass}
+              inputClassName="h-9"
               aria-label={range ? `${title} start` : `${title} time`}
-              value={time ?? ''}
+              defaultValue={time ?? ''}
               disabled={disabled}
-              onChange={(e) => onTimeChange?.(e.target.value || null)}
+              onCommit={(next) => next !== time && onTimeChange?.(next)}
             />
             {range && (
               <>
                 <span aria-hidden="true" className="text-ink-2">
                   –
                 </span>
-                <Input
-                  type="time"
+                <TimeInput
+                  key={timeEnd ?? ''}
                   className={timeClass}
+                  inputClassName="h-9"
                   aria-label={`${title} end`}
-                  value={timeEnd ?? ''}
+                  defaultValue={timeEnd ?? ''}
                   disabled={disabled}
-                  onChange={(e) => onTimeEndChange?.(e.target.value || null)}
+                  onCommit={(next) => next !== timeEnd && onTimeEndChange?.(next)}
                 />
               </>
             )}

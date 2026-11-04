@@ -46,6 +46,24 @@ describe('RoutineEditor', () => {
     expect(h.onChangeTime).toHaveBeenCalledWith(wakeUp.id, '07:15')
   })
 
+  it('reads a quickly typed 24-hour time and puts back something that is not a time', async () => {
+    const user = userEvent.setup()
+    const h = setup()
+    const time = screen.getByLabelText('Time for Wake up')
+    await user.clear(time)
+    await user.type(time, '2130{Enter}')
+    expect(time).toHaveValue('21:30')
+    expect(h.onChangeTime).toHaveBeenCalledWith(wakeUp.id, '21:30')
+    await user.tab()
+    expect(h.onChangeTime).toHaveBeenCalledTimes(1)
+
+    await user.clear(time)
+    await user.type(time, '99')
+    await user.tab()
+    expect(time).toHaveValue('06:00')
+    expect(h.onChangeTime).toHaveBeenCalledTimes(1)
+  })
+
   it('does not save when the time did not change', async () => {
     const user = userEvent.setup()
     const h = setup()
