@@ -3,12 +3,12 @@ import userEvent from '@testing-library/user-event'
 import type { ComponentProps } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { mockTodayItems } from '@/mocks/today'
-import type { TodayItem } from '@/schemas/today'
+import type { TodayItem, TodayItemStatus } from '@/schemas/today'
 import { TodayTasksCard } from './TodayTasksCard'
 
 function setup(items: TodayItem[] = mockTodayItems, extra: Partial<ComponentProps<typeof TodayTasksCard>> = {}) {
   const handlers = {
-    onToggle: vi.fn<(item: TodayItem, done: boolean) => void>(),
+    onStatus: vi.fn<(item: TodayItem, status: TodayItemStatus) => void>(),
     onRemove: vi.fn<(id: string) => void>(),
   }
   render(<TodayTasksCard items={items} {...handlers} {...extra} />)
@@ -18,7 +18,7 @@ function setup(items: TodayItem[] = mockTodayItems, extra: Partial<ComponentProp
 const rowTitles = () =>
   within(screen.getByRole('list', { name: 'Tasks' }))
     .getAllByRole('listitem')
-    .map((row) => row.querySelector('label')?.textContent)
+    .map((row) => row.querySelector('span[id]')?.textContent)
 
 describe('TodayTasksCard', () => {
   it('shows the done count, progress and filter counts', () => {
@@ -57,11 +57,28 @@ describe('TodayTasksCard', () => {
     expect(screen.getByRole('button', { name: 'One-off 6' })).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('passes ticks up', async () => {
+  it('passes ✓ / ✗ up', async () => {
     const user = userEvent.setup()
     const h = setup()
-    await user.click(screen.getByRole('checkbox', { name: 'Read 20 pages' }))
-    expect(h.onToggle).toHaveBeenCalledWith(expect.objectContaining({ title: 'Read 20 pages' }), true)
+    await user.click(screen.getByRole('button', { name: 'Done', description: 'Read 20 pages' }))
+    expect(h.onStatus).toHaveBeenCalledWith(expect.objectContaining({ title: 'Read 20 pages' }), 'done')
+    await user.click(screen.getByRole('button', { name: 'Not done', description: 'Read 20 pages' }))
+    expect(h.onStatus).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Read 20 pages' }), 'missed')
+  })
+
+  it('shows Edit and Delete on every row when given', async () => {
+    const user = userEvent.setup()
+    const onEdit = vi.fn<(item: TodayItem) => void>()
+    setup(mockTodayItems, { onEdit, onDeleteTask: vi.fn<(item: TodayItem) => void>() })
+    expect(screen.getAllByRole('button', { name: 'Edit task' })).toHaveLength(11)
+    expect(screen.getAllByRole('button', { name: 'Delete task' })).toHaveLength(11)
+    await user.click(screen.getByRole('button', { name: 'Edit task', description: 'Review Q4 goals' }))
+    expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ title: 'Review Q4 goals' }))
+  })
+
+  it('puts “Not done” items at the bottom with the done ones', () => {
+    setup(mockTodayItems.map((i) => (i.title === 'Read 20 pages' ? { ...i, missed: true } : i)))
+    expect(rowTitles().indexOf('Read 20 pages (not done)')).toBeGreaterThan(rowTitles().indexOf('Wake up'))
   })
 
   it('folds down to the heading with the arrow and back', async () => {

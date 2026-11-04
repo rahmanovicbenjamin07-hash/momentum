@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { Progress } from '@/components/ui/progress'
 import { countTodayItems, filterTodayItems, percentDone, sortTodayItems, type TodayFilter } from '@/lib/today-list'
-import type { TodayItem } from '@/schemas/today'
+import type { TodayItem, TodayItemStatus } from '@/schemas/today'
 import { TaskRow } from './TaskRow'
 
 type TodayTasksCardProps = {
@@ -21,7 +21,10 @@ type TodayTasksCardProps = {
   day?: TaskDay
   /** Everything scheduled that day: routine items and one-off tasks. Sorted here. */
   items: readonly TodayItem[]
-  onToggle: (item: TodayItem, done: boolean) => void
+  /** ✓ Done / ✗ Not done / back to open. */
+  onStatus: (item: TodayItem, status: TodayItemStatus) => void
+  /** Pencil button: the page opens the Edit pop-up. Left out = no edit buttons. */
+  onEdit?: (item: TodayItem) => void
   /**
    * Trash button on a one-off task: delete it straight away (the page offers Undo).
    * Repeating items ask first, then go through `onRemove`. Left out = no trash buttons.
@@ -62,7 +65,8 @@ function emptyText(filter: TodayFilter, day: TaskDay): string {
 export function TodayTasksCard({
   day = 'today',
   items,
-  onToggle,
+  onStatus,
+  onEdit,
   onRemove,
   onDeleteTask,
   defaultCollapsed = false,
@@ -183,7 +187,13 @@ export function TodayTasksCard({
           ) : (
             <ul aria-label={words.list}>
               {visible.map((item) => (
-                <TaskRow key={`${item.kind}-${item.id}`} item={item} onToggle={onToggle} onDelete={handleDelete} />
+                <TaskRow
+                  key={`${item.kind}-${item.id}`}
+                  item={item}
+                  onStatus={onStatus}
+                  onEdit={onEdit}
+                  onDelete={handleDelete}
+                />
               ))}
             </ul>
           )}

@@ -30,6 +30,8 @@ import { MissedYesterday } from '@/components/today/MissedYesterday'
 import { OverdueBlock } from '@/components/today/OverdueBlock'
 import { AddTaskDialog } from '@/components/today/AddTaskDialog'
 import { TodayTasksCard } from '@/components/today/TodayTasksCard'
+import { EditTaskDialog } from '@/components/today/EditTaskDialog'
+import type { TodayItem } from '@/schemas/today'
 import { WeekGrid } from '@/components/week/WeekGrid'
 import { WeekHeader } from '@/components/week/WeekHeader'
 import { weekRangeLabel } from '@/lib/week'
@@ -264,19 +266,52 @@ function levelRange(minDays: number, nextMinDays: number | undefined) {
   return `${minDays}–${nextMinDays - 1} days`
 }
 
-/** TodayTasksCard with mock data kept in local state, so ticking and removing feel real. */
+/** TodayTasksCard + EditTaskDialog with mock data kept in local state, so ✓ / ✗, edit and delete feel real. */
 function TasksDemo() {
   const [items, setItems] = useState(mockTodayItems)
+  const [editing, setEditing] = useState<TodayItem | null>(null)
 
   return (
-    <TodayTasksCard
-      items={items}
-      onToggle={(item, done) => setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, done } : i)))}
-      onRemove={(id) => {
-        setItems((prev) => prev.filter((i) => i.id !== id))
-        log('remove')(id)
-      }}
-    />
+    <>
+      <TodayTasksCard
+        items={items}
+        onStatus={(item, status) =>
+          setItems((prev) =>
+            prev.map((i) => (i.id === item.id ? { ...i, done: status === 'done', missed: status === 'missed' } : i)),
+          )
+        }
+        onEdit={setEditing}
+        onDeleteTask={(item) => setItems((prev) => prev.filter((i) => i.id !== item.id))}
+        onRemove={(id) => {
+          setItems((prev) => prev.filter((i) => i.id !== id))
+          log('remove')(id)
+        }}
+      />
+      <EditTaskDialog
+        item={editing}
+        date={MOCK_TODAY}
+        onOpenChange={(open) => !open && setEditing(null)}
+        onSubmit={async (result) => {
+          await new Promise((resolve) => setTimeout(resolve, 300))
+          if (result.title.includes('fail')) throw new Error("Couldn't save. Check your connection and try again.")
+          setItems((prev) =>
+            prev.map((i) =>
+              i.id === result.id
+                ? {
+                    ...i,
+                    title: result.title,
+                    time: result.time,
+                    ...(result.notes === undefined ? {} : { notes: result.notes }),
+                    ...(result.kind === 'routine' ? { days: result.days } : {}),
+                  }
+                : i,
+            ),
+          )
+          log('edit')(result)
+          setEditing(null)
+        }}
+      />
+    </>
   )
 }
 
@@ -337,7 +372,6 @@ function PromptsDemo() {
       />
       <MissedYesterday
         items={missed}
-        streakSafe
         onReason={(item, reason) => {
           setMissed((prev) => prev.filter((m) => m.id !== item.id))
           log('reason')({ title: item.title, reason })
@@ -1371,15 +1405,11 @@ export default function DevPreview() {
         <Section title="TodayLayout with the cards (narrow the window: aside drops under main below 1024px; type in the note)">
           <div className="rounded-xl border border-dashed border-border p-4">
             <TodayLayout
-              topCards={
+              main={<Placeholder label="Missed yesterday, overdue, today's and tomorrow's tasks (see the demos below)" className="h-64" />}
+              aside={
                 <>
                   <ProgressCard progress={todayProgress(mockTodayItems)} />
                   <StreakCard days={12} />
-                </>
-              }
-              main={<Placeholder label="Missed yesterday, overdue and today's tasks (see the demos below)" className="h-64" />}
-              aside={
-                <>
                   <ThisWeekCard week={mockWeekProgress} />
                   <NoteDemo />
                 </>
@@ -1426,14 +1456,15 @@ export default function DevPreview() {
               items={mockTodayItems.slice(0, 4).map((item) => ({ ...item, done: false }))}
               defaultCollapsed
               onCollapsedChange={log('collapsed')}
-              onToggle={log('toggle')}
+              onStatus={log('status')}
+              onEdit={log('edit')}
               onRemove={log('remove')}
               onDeleteTask={log('delete')}
             />
             <TodayTasksCard
               day="tomorrow"
               items={[]}
-              onToggle={log('toggle')}
+              onStatus={log('status')}
               onRemove={log('remove')}
             />
           </div>

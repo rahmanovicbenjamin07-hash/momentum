@@ -4,6 +4,7 @@ import {
   countTodayItems,
   filterTodayItems,
   formatRepeatDays,
+  formatTimeRange,
   percentDone,
   sortTodayItems,
   tagLabel,
@@ -12,6 +13,15 @@ import {
 } from './today-list'
 
 const d = (s: string) => s.split('').map((c) => c === '1')
+
+describe('formatTimeRange', () => {
+  it('shows a range, a single time, or Anytime', () => {
+    expect(formatTimeRange('08:00', '11:00')).toBe('08:00–11:00')
+    expect(formatTimeRange('09:30', null)).toBe('09:30')
+    expect(formatTimeRange('09:30')).toBe('09:30')
+    expect(formatTimeRange(null, null)).toBe('Anytime')
+  })
+})
 
 describe('formatRepeatDays', () => {
   it.each([

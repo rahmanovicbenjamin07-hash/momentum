@@ -1,11 +1,12 @@
 import { format, parseISO } from 'date-fns'
-import { Plus, RefreshCw } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useId } from 'react'
 import { Link } from 'react-router'
 import { cn } from 'cn'
 import { MeterBar } from '@/components/MeterBar'
 import { Checkbox } from '@/components/ui/checkbox'
 import type { DateKey } from '@/lib/dates'
+import { formatTimeRange } from '@/lib/today-list'
 import type { WeekColumn } from '@/lib/week'
 import type { TodayItem } from '@/schemas/today'
 
@@ -114,17 +115,12 @@ function WeekItem({ item, onToggle }: { item: TodayItem; onToggle: (done: boolea
         className="mt-0.5 size-4 border-ink-3"
       />
       <label htmlFor={checkboxId} className="min-w-0 flex-1 cursor-pointer text-[13px] leading-snug break-words">
-        <span className={item.done ? 'text-ink-3 line-through' : 'text-foreground'}>{item.title}</span>
-        {(item.kind === 'routine' || item.time) && (
-          <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-ink-2 tabular-nums">
-            {item.kind === 'routine' && (
-              <>
-                <RefreshCw className="size-3 text-brand" aria-hidden="true" />
-                <span className="sr-only">Repeating</span>
-              </>
-            )}
-            {item.time}
-          </span>
+        <span className={item.done ? 'text-ink-3 line-through' : item.missed ? 'text-bad line-through' : 'text-foreground'}>
+          {item.title}
+        </span>
+        {item.missed && <span className="sr-only"> (not done)</span>}
+        {item.time && (
+          <span className="mt-0.5 block text-[11px] text-ink-2 tabular-nums">{formatTimeRange(item.time, item.endTime)}</span>
         )}
       </label>
     </li>

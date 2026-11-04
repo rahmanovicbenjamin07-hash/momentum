@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { TimeInput } from '@/components/ui/time-input'
 import { dayIndex, getToday, type DateKey } from '@/lib/dates'
 import { buildQuickAdd, defaultQuickAddDay, quickAddDueDate, type QuickAddResult } from '@/lib/quickAddSubmit'
 import {
@@ -108,7 +109,7 @@ function AddTaskForm({
 }: Pick<AddTaskDialogProps, 'onSubmit'> & { onCancel: () => void; today: DateKey; viewedDay: DateKey }) {
   const id = useId()
   const defaults = useMemo<QuickAddFormInput>(
-    () => ({ text: '', time: '', repeat: 'just_today', ...defaultQuickAddDay(viewedDay, today) }),
+    () => ({ text: '', time: '', endTime: '', repeat: 'just_today', ...defaultQuickAddDay(viewedDay, today) }),
     [viewedDay, today],
   )
   const {
@@ -141,7 +142,7 @@ function AddTaskForm({
   })
 
   const textError = errors.text?.message
-  const whenError = errors.date?.message ?? errors.time?.message
+  const whenError = errors.date?.message ?? errors.time?.message ?? errors.endTime?.message
 
   return (
     <form noValidate onSubmit={save} className="flex flex-col gap-5">
@@ -171,8 +172,9 @@ function AddTaskForm({
         <legend className="mb-2">
           <Step number={2}>Day and time (optional)</Step>
         </legend>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="grid gap-1.5">
+        {/* Phone: Day on its own line, From / Until side by side. Wider: all three in a row. */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="col-span-2 grid gap-1.5 sm:col-span-1">
             <Label htmlFor={`${id}-day`} className="text-[13px] font-normal text-ink-2">
               Day
             </Label>
@@ -195,9 +197,20 @@ function AddTaskForm({
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor={`${id}-time`} className="text-[13px] font-normal text-ink-2">
-              Time
+              From
             </Label>
-            <Input id={`${id}-time`} type="time" aria-invalid={errors.time ? true : undefined} {...register('time')} />
+            <TimeInput id={`${id}-time`} aria-invalid={errors.time ? true : undefined} {...register('time')} />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor={`${id}-end`} className="text-[13px] font-normal text-ink-2">
+              Until
+            </Label>
+            <TimeInput
+              id={`${id}-end`}
+              aria-invalid={errors.endTime ? true : undefined}
+              aria-describedby={`${id}-end-hint`}
+              {...register('endTime')}
+            />
           </div>
         </div>
         {day === 'date' && !everyDay && (
@@ -214,6 +227,9 @@ function AddTaskForm({
             Every day starts today.
           </p>
         )}
+        <p id={`${id}-end-hint`} className="text-xs text-ink-2">
+          Until is optional: fill it in for something with an end, like classes 08:00–11:00.
+        </p>
         {whenError && <p className="text-xs text-bad">{whenError}</p>}
       </fieldset>
 

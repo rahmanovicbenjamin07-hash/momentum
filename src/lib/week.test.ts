@@ -30,8 +30,8 @@ describe('weekColumns', () => {
     expect(columns.map((c) => (c.isToday ? 'T' : c.isPast ? 'P' : 'F')).join('')).toBe('PPTFFFF')
   })
 
-  it('puts repeating items on their weekdays and tasks on their due date (once, without dropped ones)', () => {
-    expect(columns.map((c) => c.items.map((i) => i.id).join(','))).toEqual(['r1,a', 'r1', 'r1,b', 'r1', 'r1', '', 'c'])
+  it('puts repeating items on their weekdays and tasks on their due date (once; not-done ones too)', () => {
+    expect(columns.map((c) => c.items.map((i) => i.id).join(','))).toEqual(['r1,a', 'r1', 'r1,b', 'r1,d', 'r1', '', 'c'])
   })
 
   it('counts each day: done, total and percent (null when nothing is planned)', () => {
@@ -39,7 +39,7 @@ describe('weekColumns', () => {
       [2, 2, 100],
       [0, 1, 0],
       [0, 2, 0],
-      [0, 1, 0],
+      [0, 2, 0],
       [0, 1, 0],
       [0, 0, null],
       [0, 1, 0],

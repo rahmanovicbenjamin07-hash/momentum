@@ -31,14 +31,13 @@ async function fetchTasksForDate(date: DateKey): Promise<Task[]> {
     .from('tasks')
     .select('*')
     .eq('due_date', date)
-    .neq('status', 'dropped')
     .order('position')
     .order('created_at')
   if (error) throw error
   return data as Task[]
 }
 
-/** One-off tasks due on `date` (todo + done; dropped ones are hidden). */
+/** One-off tasks due on `date`: todo, done and dropped ("Not done", shown crossed out). */
 export function useTasksForDate(date: DateKey) {
   return useQuery({
     queryKey: queryKeys.today.tasks(date),
@@ -125,6 +124,7 @@ export function buildTask(input: NewTask, ids: { id: string; userId: string; pos
     notes: input.notes ?? null,
     due_date: input.dueDate,
     time: toDbTime(input.time),
+    end_time: toDbTime(input.endTime),
     tag: input.tag ?? null,
     priority: input.priority ?? 'medium',
     status: 'todo',
@@ -143,6 +143,8 @@ export type NewTask = {
   dueDate: DateKey
   /** "HH:MM", or null/undefined for Anytime. */
   time?: string | null
+  /** "HH:MM" end of a range (time–endTime); null/undefined = just a start time. */
+  endTime?: string | null
   /** Without "#". */
   tag?: string | null
   priority?: Priority
@@ -165,6 +167,8 @@ export function useCreateTask() {
         notes: task.notes,
         due_date: task.due_date,
         time: task.time,
+        // Only sent when set, so adding tasks works before the end_time column exists.
+        ...(task.end_time ? { end_time: task.end_time } : {}),
         tag: task.tag,
         priority: task.priority,
         position: task.position,
@@ -237,10 +241,17 @@ function useTaskMutation<TInput>(config: {
   })
 }
 
-async function updateTask(id: string, patch: { status?: Task['status']; due_date?: DateKey }): Promise<void> {
+type TaskPatch = Partial<Pick<Task, 'status' | 'due_date' | 'title' | 'time' | 'end_time' | 'notes'>>
+
+async function updateTask(id: string, patch: TaskPatch): Promise<void> {
   // completed_at is set/cleared by a database trigger when status changes.
   const { error } = await supabase.from('tasks').update(patch).eq('id', id)
   if (error) throw error
+}
+
+/** What the cache shows straight away for a new status (completed_at mirrors the database trigger). */
+function statusPatch(status: Task['status']): Partial<Task> {
+  return { status, completed_at: status === 'done' ? new Date().toISOString() : null }
 }
 
 export type ToggleTaskInput = { id: string; done: boolean }
@@ -250,13 +261,80 @@ export function useToggleTask() {
   return useTaskMutation({
     save: ({ id, done }: ToggleTaskInput) => updateTask(id, { status: done ? 'done' : 'todo' }),
     apply: ({ id, done }) => {
-      const patch: Partial<Task> = done
-        ? { status: 'done', completed_at: new Date().toISOString() }
-        : { status: 'todo', completed_at: null }
+      const patch = statusPatch(done ? 'done' : 'todo')
       return { tasks: (list) => patchTask(list, id, patch), overdue: (list) => patchTask(list, id, patch) }
     },
     errorMessage: "Couldn't update the task. Try again.",
   })
+}
+
+export type SetTaskStatusInput = { id: string; status: Task['status'] }
+
+/**
+ * The ✓ / ✗ buttons: 'done', 'dropped' (Not done) or back to 'todo'.
+ * A not-done task stays in its day's list; it leaves the overdue list. Instant; rolls back with a toast.
+ */
+export function useSetTaskStatus() {
+  return useTaskMutation({
+    save: ({ id, status }: SetTaskStatusInput) => updateTask(id, { status }),
+    apply: ({ id, status }) => {
+      const patch = statusPatch(status)
+      return {
+        tasks: (list) => patchTask(list, id, patch),
+        overdue: (list) => (status === 'todo' ? patchTask(list, id, patch) : withoutTask(list, id)),
+      }
+    },
+    errorMessage: "Couldn't update the task. Try again.",
+  })
+}
+
+export type UpdateTaskInput = {
+  task: Task
+  /**
+   * time: "HH:MM", or null for Anytime. endTime / notes: end of a range / the description;
+   * leave out to keep them as they are.
+   */
+  changes: { title: string; dueDate: DateKey; time: string | null; endTime?: string | null; notes?: string | null }
+}
+
+function toTaskPatch(changes: UpdateTaskInput['changes']): TaskPatch {
+  const patch: TaskPatch = { title: changes.title.trim(), due_date: changes.dueDate, time: toDbTime(changes.time) }
+  if (changes.endTime !== undefined) patch.end_time = toDbTime(changes.endTime)
+  if (changes.notes !== undefined) patch.notes = changes.notes
+  return patch
+}
+
+/**
+ * Task pop-up: new name, description, day and/or time. Moves the task between day lists straight away.
+ * `save({ id, changes })` looks the full row up in the cache (it's on screen, so it's loaded).
+ */
+export function useUpdateTask() {
+  const queryClient = useQueryClient()
+  const mutation = useTaskMutation({
+    save: ({ task, changes }: UpdateTaskInput) => updateTask(task.id, toTaskPatch(changes)),
+    apply: ({ task, changes }) => {
+      const patch = toTaskPatch(changes)
+      return {
+        tasks: (list, date) => {
+          // A lead's list (no date) just gets the new values.
+          if (date === undefined) return patchTask(list, task.id, patch)
+          if (date !== changes.dueDate) return withoutTask(list, task.id)
+          return list.some((t) => t.id === task.id) ? patchTask(list, task.id, patch) : [...list, { ...task, ...patch }]
+        },
+        overdue: (list) => patchTask(list, task.id, patch),
+      }
+    },
+    errorMessage: "Couldn't save the change. Try again.",
+  })
+
+  return {
+    ...mutation,
+    save: (input: { id: string; changes: UpdateTaskInput['changes'] }): Promise<void> => {
+      const task = findCachedTask(queryClient, input.id)
+      if (!task) return Promise.reject(new Error("Couldn't find that task. Reload and try again."))
+      return mutation.mutateAsync({ task, changes: input.changes })
+    },
+  }
 }
 
 export type MoveToTodayInput = { task: Task; today: DateKey }
@@ -277,11 +355,14 @@ export function useMoveToToday() {
   })
 }
 
-/** Overdue block → "Drop". The task is kept (status = dropped) but hidden everywhere. */
+/** Overdue block → "Drop": the task counts as not done on its own day (status = dropped). */
 export function useDropTask() {
   return useTaskMutation({
     save: (id: string) => updateTask(id, { status: 'dropped' }),
-    apply: (id) => ({ tasks: (list) => withoutTask(list, id), overdue: (list) => withoutTask(list, id) }),
+    apply: (id) => ({
+      tasks: (list) => patchTask(list, id, statusPatch('dropped')),
+      overdue: (list) => withoutTask(list, id),
+    }),
     errorMessage: "Couldn't drop the task. Try again.",
   })
 }
@@ -362,6 +443,8 @@ export function useDeleteTask() {
         notes: task.notes,
         due_date: task.due_date,
         time: task.time,
+        // Only sent when set, so adding tasks works before the end_time column exists.
+        ...(task.end_time ? { end_time: task.end_time } : {}),
         tag: task.tag,
         priority: task.priority,
         status: task.status,

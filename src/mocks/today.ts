@@ -42,7 +42,7 @@ export const mockRoutineItems: RoutineItem[] = [
 /** Today's list: 5 routine items scheduled on Wednesday + 6 one-off tasks. 5 of 11 done. */
 export const mockTodayItems: TodayItem[] = [
   { kind: 'routine', id: uuid(1), title: 'Wake up', time: '06:00', done: true, days: MON_FRI },
-  { kind: 'routine', id: uuid(2), title: 'Morning workout', time: '06:30', done: true, days: MON_WED_FRI },
+  { kind: 'routine', id: uuid(2), title: 'Morning workout', time: '06:30', endTime: '07:30', done: true, days: MON_WED_FRI },
   { kind: 'routine', id: uuid(3), title: 'Plan today’s top 3 tasks', time: null, done: true, days: EVERY_DAY },
   { kind: 'routine', id: uuid(4), title: 'Send 10 outreach messages', time: null, done: false, days: MON_FRI },
   { kind: 'routine', id: uuid(5), title: 'Read 20 pages', time: '21:30', done: false, days: EVERY_DAY },
@@ -55,7 +55,7 @@ export const mockTodayItems: TodayItem[] = [
     tag: 'outreach',
     priority: 'high',
   },
-  { kind: 'task', id: uuid(102), title: 'Prepare demo for Thursday call', time: '14:00', done: false, tag: 'work', priority: 'high' },
+  { kind: 'task', id: uuid(102), title: 'Prepare demo for Thursday call', time: '14:00', done: false, tag: 'work', priority: 'high', notes: 'Show the booking flow and the new dashboard. Keep it under 15 minutes.' },
   {
     kind: 'task',
     id: uuid(103),

@@ -1,105 +1,132 @@
-import { useId } from 'react'
+import { useId, type ReactNode } from 'react'
 import { cn } from 'cn'
-import { RefreshCw, Trash2 } from 'lucide-react'
-import { Checkbox } from '@/components/ui/checkbox'
-import { formatRepeatDays, tagLabel, tagTone, type TagTone } from '@/lib/today-list'
-import type { Priority, TodayItem } from '@/schemas/today'
-
-const TONE_CLASSES: Record<TagTone, string> = {
-  brand: 'bg-brand-tint text-brand',
-  info: 'bg-info-tint text-info',
-  neutral: 'bg-muted text-ink-2',
-  pink: 'bg-tag-pink-tint text-tag-pink',
-  good: 'bg-good-tint text-good',
-  warn: 'bg-warn-tint text-warn',
-}
-
-const PRIORITY: Record<Priority, { label: string; className: string }> = {
-  high: { label: 'High', className: 'text-bad' },
-  medium: { label: 'Medium', className: 'text-warn' },
-  low: { label: 'Low', className: 'text-ink-3' },
-}
-
-const chip = 'inline-flex h-6 items-center gap-1 rounded-lg px-2 text-xs font-medium whitespace-nowrap'
+import { Check, Pencil, Trash2, X } from 'lucide-react'
+import { formatTimeRange } from '@/lib/today-list'
+import { itemStatus, type TodayItem, type TodayItemStatus } from '@/schemas/today'
 
 type TaskRowProps = {
   item: TodayItem
-  onToggle: (item: TodayItem, done: boolean) => void
+  /** ✓ / ✗ buttons. Pressing the one that's already on sets the item back to 'open'. */
+  onStatus: (item: TodayItem, status: TodayItemStatus) => void
+  /** Opens the task pop-up: clicking the title or the pencil. Left out = neither. */
+  onEdit?: (item: TodayItem) => void
   /** Trash button. Left out = no button. */
   onDelete?: (item: TodayItem) => void
 }
 
+const markButton =
+  'inline-flex size-8 shrink-0 items-center justify-center rounded-lg border outline-none focus-visible:ring-3 focus-visible:ring-ring/50'
+
+const iconButton =
+  'inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-ink-2 outline-none focus-visible:ring-3 focus-visible:ring-ring/50'
+
+/** The title area: a button that opens the task pop-up, or plain text when there's no `onClick`. */
+function TitleWrapper({ onClick, className, children }: { onClick?: () => void; className: string; children: ReactNode }) {
+  if (!onClick) return <div className={className}>{children}</div>
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(className, '-my-1 cursor-pointer rounded-lg py-1 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50')}
+    >
+      {children}
+    </button>
+  )
+}
+
 /**
- * One line in "Today's tasks": checkbox, title, repeating chip or tag + priority, time, trash.
- * The trash button shows on hover / keyboard focus where there's a mouse, and always on touch screens.
+ * One line in "Today's tasks": ✓ Done and ✗ Not done buttons, title (click it to open the task),
+ * a one-line description preview, time, then Edit and Delete. Everything is always visible.
  */
-export function TaskRow({ item, onToggle, onDelete }: TaskRowProps) {
-  const checkboxId = useId()
+export function TaskRow({ item, onStatus, onEdit, onDelete }: TaskRowProps) {
   const titleId = useId()
+  const status = itemStatus(item)
+  const done = status === 'done'
+  const missed = status === 'missed'
 
   return (
-    <li
-      className="group flex min-h-16 items-center gap-3 border-t border-border px-4 py-3"
-      data-done={item.done || undefined}
-    >
-      <Checkbox
-        id={checkboxId}
-        checked={item.done}
-        onCheckedChange={(checked) => onToggle(item, checked === true)}
-        className="size-[18px] border-ink-3"
-      />
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
-        <label
-          id={titleId}
-          htmlFor={checkboxId}
+    <li className="flex min-h-16 items-center gap-2 border-t border-border px-3 py-3 sm:gap-3 sm:px-4" data-status={status}>
+      <div className="flex shrink-0 gap-1.5">
+        <button
+          type="button"
+          aria-label="Done"
+          aria-describedby={titleId}
+          aria-pressed={done}
+          onClick={() => onStatus(item, done ? 'open' : 'done')}
           className={cn(
-            'min-w-0 flex-1 basis-56 cursor-pointer text-[15px] break-words',
-            item.done ? 'text-ink-3 line-through' : 'text-foreground',
+            markButton,
+            done ? 'border-good bg-good text-white' : 'border-border bg-card text-ink-3 hover:bg-good-tint hover:text-good',
+          )}
+        >
+          <Check className="size-4" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          aria-label="Not done"
+          aria-describedby={titleId}
+          aria-pressed={missed}
+          onClick={() => onStatus(item, missed ? 'open' : 'missed')}
+          className={cn(
+            markButton,
+            missed ? 'border-bad bg-bad text-white' : 'border-border bg-card text-ink-3 hover:bg-bad-tint hover:text-bad',
+          )}
+        >
+          <X className="size-4" aria-hidden="true" />
+        </button>
+      </div>
+      {/* Clicking the task opens its pop-up (same as the pencil). */}
+      <TitleWrapper
+        onClick={onEdit ? () => onEdit(item) : undefined}
+        className="min-w-0 flex-1 text-left break-words"
+      >
+        <span
+          id={titleId}
+          className={cn(
+            'block text-[15px]',
+            done && 'text-ink-3 line-through',
+            missed && 'text-bad line-through',
+            !done && !missed && 'text-foreground',
           )}
         >
           {item.title}
-        </label>
-        <div className="flex items-center gap-3">
-          {item.kind === 'routine' ? (
-            // Icon only; the days show on hover and screen readers hear them.
-            <span
-              title={`Repeating · ${formatRepeatDays(item.days ?? [])}`}
-              className={cn('grid size-6 place-items-center rounded-full', TONE_CLASSES.brand)}
+          {missed && <span className="sr-only"> (not done)</span>}
+        </span>
+        {item.notes && <span className="mt-0.5 line-clamp-1 block text-[13px] text-ink-2">{item.notes}</span>}
+      </TitleWrapper>
+      <span
+        className={cn(
+          'shrink-0 text-right text-[15px] whitespace-nowrap tabular-nums',
+          item.endTime ? 'sm:w-28' : 'sm:w-16',
+          item.time ? 'text-foreground' : 'text-ink-3',
+        )}
+      >
+        {formatTimeRange(item.time, item.endTime)}
+      </span>
+      {(onEdit || onDelete) && (
+        <div className="-mr-1 flex shrink-0 gap-0.5">
+          {onEdit && (
+            <button
+              type="button"
+              aria-label="Edit task"
+              aria-describedby={titleId}
+              onClick={() => onEdit(item)}
+              className={cn(iconButton, 'hover:bg-brand-tint hover:text-brand')}
             >
-              <RefreshCw className="size-3.5" aria-hidden="true" />
-              <span className="sr-only">Repeating · {formatRepeatDays(item.days ?? [])}</span>
-            </span>
-          ) : (
-            <>
-              {item.tag && <span className={cn(chip, TONE_CLASSES[tagTone(item.tag)])}>{tagLabel(item.tag)}</span>}
-              {item.priority && (
-                <span className={cn('text-[13px] font-medium sm:w-14', PRIORITY[item.priority].className)}>
-                  <span className="sr-only">Priority: </span>
-                  {PRIORITY[item.priority].label}
-                </span>
-              )}
-            </>
+              <Pencil className="size-4" aria-hidden="true" />
+            </button>
           )}
-          <span className={cn('text-[15px] sm:w-16 sm:text-right', item.time ? 'text-foreground' : 'text-ink-3')}>
-            {item.time ?? 'Anytime'}
-          </span>
+          {onDelete && (
+            <button
+              type="button"
+              aria-label="Delete task"
+              aria-describedby={titleId}
+              onClick={() => onDelete(item)}
+              className={cn(iconButton, 'hover:bg-bad-tint hover:text-bad')}
+            >
+              <Trash2 className="size-4" aria-hidden="true" />
+            </button>
+          )}
         </div>
-      </div>
-      {onDelete && (
-        <button
-          type="button"
-          aria-label="Delete task"
-          aria-describedby={titleId}
-          onClick={() => onDelete(item)}
-          className={cn(
-            '-mr-1 inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-ink-3 outline-none',
-            'hover:bg-bad-tint hover:text-bad focus-visible:text-bad focus-visible:ring-3 focus-visible:ring-ring/50',
-            // Mouse/trackpad: hidden until the row is hovered or something in it has focus. Touch: always shown.
-            '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100',
-          )}
-        >
-          <Trash2 className="size-4" aria-hidden="true" />
-        </button>
       )}
     </li>
   )

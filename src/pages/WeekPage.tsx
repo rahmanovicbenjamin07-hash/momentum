@@ -2,8 +2,9 @@ import { Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
-import { useCreateRoutineItem, useToggleRoutineCheck } from '@/api/routine'
-import { useCreateTask, useToggleTask } from '@/api/tasks'
+import { useCreateRoutineItem } from '@/api/routine'
+import { useCreateTask } from '@/api/tasks'
+import { useTaskActions } from '@/app/useTaskActions'
 import { useUserToday } from '@/app/useUserToday'
 import { useWeekData } from '@/app/useWeekData'
 import { EmptyState } from '@/components/EmptyState'
@@ -26,8 +27,7 @@ export default function WeekPage() {
   const thisWeek = weekStart(today, weekStartsOn)
   const { columns, isError, refetch } = useWeekData(first)
 
-  const toggleCheck = useToggleRoutineCheck()
-  const toggleTask = useToggleTask()
+  const taskActions = useTaskActions()
   const createTask = useCreateTask()
   const createRoutine = useCreateRoutineItem()
   const [addDay, setAddDay] = useState<DateKey | null>(null)
@@ -37,8 +37,7 @@ export default function WeekPage() {
   }
 
   function handleToggle(item: TodayItem, done: boolean, date: DateKey) {
-    if (item.kind === 'routine') toggleCheck.mutate({ routineItemId: item.id, date, done })
-    else toggleTask.mutate({ id: item.id, done })
+    taskActions.setStatus(item, done ? 'done' : 'open', date)
   }
 
   async function handleAdd(result: QuickAddResult) {
@@ -48,12 +47,18 @@ export default function WeekPage() {
           title: result.title,
           dueDate: result.dueDate,
           time: result.time,
+          endTime: result.endTime,
           tag: result.tag,
           priority: result.priority ?? undefined,
         })
         toast.success(`Task added for ${result.dueDate === today ? 'today' : formatDate(result.dueDate)}`)
       } else {
-        await createRoutine.mutateAsync({ title: result.title, days: result.days, time: result.time })
+        await createRoutine.mutateAsync({
+          title: result.title,
+          days: result.days,
+          time: result.time,
+          endTime: result.endTime,
+        })
         toast.success(`Repeating task added · ${formatDays(result.days)}`)
       }
     } catch {

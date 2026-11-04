@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type MutateOptions, type QueryKey } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { useAuth } from '@/app/auth-context'
 import type { TablesUpdate } from '@/lib/database.types'
@@ -50,6 +50,8 @@ export type NewRoutineItem = {
   days: boolean[]
   /** "HH:MM", or null for Anytime. */
   time: string | null
+  /** "HH:MM" end of a range (time–endTime); null/undefined = just a start time. */
+  endTime?: string | null
 }
 
 export function useCreateRoutineItem() {
@@ -60,7 +62,14 @@ export function useCreateRoutineItem() {
       const position = nextPosition(queryClient.getQueryData<RoutineItem[]>(itemsKey))
       const { data, error } = await supabase
         .from('routine_items')
-        .insert({ title: input.title.trim(), days: input.days, time: toDbTime(input.time), position })
+        .insert({
+          title: input.title.trim(),
+          days: input.days,
+          time: toDbTime(input.time),
+          // Only sent when set, so adding works before the end_time column exists.
+          ...(input.endTime ? { end_time: toDbTime(input.endTime) } : {}),
+          position,
+        })
         .select()
         .single()
       if (error) throw error
@@ -78,16 +87,21 @@ export function useCreateRoutineItem() {
 
 export type RoutineItemChange = {
   id: string
+  title?: string
+  /** Description; null clears it. Leave out to keep it. */
+  notes?: string | null
   /** Mon..Sun */
   days?: boolean[]
   /** "HH:MM", or null to clear (Anytime). Leave out to keep the current time. */
   time?: string | null
+  /** End of a range, or null to clear it. Leave out to keep it. */
+  endTime?: string | null
 }
 
-/** Edit-repeating mode: change days and/or time. Optimistic. */
+/** Edit-repeating mode / task pop-up: change name, description, days and/or time. Optimistic. */
 export function useUpdateRoutineItem() {
   const queryClient = useQueryClient()
-  return useMutation({
+  const mutation = useMutation({
     mutationKey: itemsMutationKey,
     mutationFn: async ({ id, ...change }: RoutineItemChange) => {
       const { error } = await supabase.from('routine_items').update(toItemPatch(change)).eq('id', id)
@@ -106,12 +120,42 @@ export function useUpdateRoutineItem() {
     },
     onSettled: () => invalidateWhenIdle(queryClient, itemsMutationKey, itemsKey),
   })
+
+  const withRange = (input: RoutineItemChange) =>
+    keepRangeValid(input, queryClient.getQueryData<RoutineItem[]>(itemsKey)?.find((item) => item.id === input.id))
+
+  return {
+    ...mutation,
+    mutate: (input: RoutineItemChange, options?: MutateOptions<void, Error, RoutineItemChange, Rollback>) =>
+      mutation.mutate(withRange(input), options),
+    mutateAsync: (input: RoutineItemChange, options?: MutateOptions<void, Error, RoutineItemChange, Rollback>) =>
+      mutation.mutateAsync(withRange(input), options),
+  }
 }
 
-function toItemPatch(change: Omit<RoutineItemChange, 'id'>): Pick<TablesUpdate<'routine_items'>, 'days' | 'time'> {
-  const patch: Pick<TablesUpdate<'routine_items'>, 'days' | 'time'> = {}
+/**
+ * When only the start time changes (Edit repeating's time box) and the item has an end time:
+ * clearing the start, or moving it to or past the end, drops the end time so the range stays valid.
+ * Pure (tested in routine.test.ts).
+ */
+export function keepRangeValid(
+  change: RoutineItemChange,
+  item: Pick<RoutineItem, 'end_time'> | undefined,
+): RoutineItemChange {
+  if (change.time === undefined || change.endTime !== undefined || !item?.end_time) return change
+  const start = toDbTime(change.time)
+  return start === null || start >= item.end_time ? { ...change, endTime: null } : change
+}
+
+function toItemPatch(
+  change: Omit<RoutineItemChange, 'id'>,
+): Pick<TablesUpdate<'routine_items'>, 'title' | 'notes' | 'days' | 'time' | 'end_time'> {
+  const patch: Pick<TablesUpdate<'routine_items'>, 'title' | 'notes' | 'days' | 'time' | 'end_time'> = {}
+  if (change.title !== undefined) patch.title = change.title.trim()
+  if (change.notes !== undefined) patch.notes = change.notes
   if (change.days !== undefined) patch.days = change.days
   if (change.time !== undefined) patch.time = toDbTime(change.time)
+  if (change.endTime !== undefined) patch.end_time = toDbTime(change.endTime)
   return patch
 }
 

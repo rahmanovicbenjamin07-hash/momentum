@@ -26,20 +26,29 @@ export function formatRepeatDays(days: readonly boolean[]): string {
   return on.join(', ')
 }
 
+/** What a row shows for its time: "08:00–11:00", "09:30", or "Anytime". */
+export function formatTimeRange(time: string | null | undefined, endTime?: string | null): string {
+  if (!time) return 'Anytime'
+  return endTime ? `${time}–${endTime}` : time
+}
+
 /** "06:00:00" (Postgres) or "06:00" → "06:00". Null stays null. */
 export function toHHMM(time: string | null | undefined): string | null {
   return time ? time.slice(0, 5) : null
 }
 
+/** Done or marked "Not done": either way it's dealt with and moves to the bottom. */
+const isSettled = (item: TodayItem) => item.done || item.missed === true
+
 /**
- * Order for "Today's tasks": unfinished first, done at the bottom;
- * inside each group by time, with "Anytime" last. Ties keep their original order.
+ * Order for "Today's tasks": open first, done / not done at the bottom;
+ * inside each group by time (morning → evening), with "Anytime" last. Ties keep their original order.
  */
 export function sortTodayItems(items: readonly TodayItem[]): TodayItem[] {
   return items
     .map((item, index) => ({ item, index }))
     .sort((a, b) => {
-      if (a.item.done !== b.item.done) return a.item.done ? 1 : -1
+      if (isSettled(a.item) !== isSettled(b.item)) return isSettled(a.item) ? 1 : -1
       const ta = a.item.time
       const tb = b.item.time
       if (ta !== tb) {

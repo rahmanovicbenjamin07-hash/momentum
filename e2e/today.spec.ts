@@ -80,6 +80,9 @@ async function openAddTask(page: Page): Promise<Locator> {
 }
 
 const tasksCard = (page: Page) => page.locator('section', { has: page.getByRole('heading', { name: /Today’s tasks/ }) })
+/** The ✓ Done button on the row with `title`. */
+const doneButton = (scope: Page | Locator, title: string) =>
+  scope.getByRole('listitem').filter({ hasText: title }).getByRole('button', { name: 'Done', exact: true })
 const tomorrowCard = (page: Page) =>
   page.locator('section', { has: page.getByRole('heading', { name: /Tomorrow’s tasks/ }) })
 
@@ -93,10 +96,10 @@ test.describe('Today page', () => {
     // 4 items today (wake, read, emir, portfolio), 1 done.
     await expect(page.getByRole('region', { name: 'Today’s progress' })).toContainText('25%')
     await expect(page.getByRole('region', { name: 'Today’s progress' })).toContainText('Repeating 0/2 · One-off 1/2')
-    // 1–26 Oct complete (26 days), 27 Oct forgiven.
-    await expect(page.getByRole('region', { name: 'Current streak' })).toContainText('26')
+    // Yesterday (27 Oct) was under 90% done, so the streak is broken (no rest days any more).
+    await expect(page.getByRole('region', { name: 'Current streak' })).toContainText(/(^|\D)0\s*days/)
     await expect(page.getByRole('link', { name: 'Today, 3 open tasks' })).toBeVisible()
-    await expect(page.getByRole('navigation', { name: 'Main' })).toContainText('26 days')
+    await expect(page.getByRole('navigation', { name: 'Main' })).toContainText(/(^|\D)0 days/)
     // Only two top cards, and no task bar on the page (Add task opens a pop-up).
     await expect(page.getByRole('region', { name: 'Outreaches this week' })).toHaveCount(0)
     await expect(page.getByRole('form', { name: 'Add a task' })).toHaveCount(0)
@@ -107,22 +110,50 @@ test.describe('Today page', () => {
     const db = await openToday(page)
 
     // "Wake up" is on tomorrow's card too, so tick it in today's.
-    await tasksCard(page).getByRole('checkbox', { name: 'Wake up' }).click()
+    await doneButton(tasksCard(page), 'Wake up').click()
     await expect(page.getByRole('region', { name: 'Today’s progress' })).toContainText('50%')
     await expect
       .poll(() => db.routine_checks?.find((c) => c.routine_item_id === 'r-wake' && c.date === TODAY)?.done)
       .toBe(true)
 
-    await page.getByRole('checkbox', { name: 'Follow up with Emir' }).click()
+    await doneButton(tasksCard(page), 'Follow up with Emir').click()
     await expect.poll(() => db.tasks?.find((t) => t.id === 't-emir')?.status).toBe('done')
     await expect(page.getByRole('link', { name: 'Today, 1 open tasks' })).toBeVisible()
+  })
+
+  test('marks a task not done, opens it and adds a description', async ({ page }) => {
+    const db = await openToday(page)
+    const card = tasksCard(page)
+    const emir = card.getByRole('listitem').filter({ hasText: 'Follow up with Emir' })
+
+    // ✗ Not done: stays in the list, crossed out, and counts as not done.
+    await emir.getByRole('button', { name: 'Not done', exact: true }).click()
+    await expect(emir.getByRole('button', { name: 'Not done', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    await expect.poll(() => db.tasks?.find((t) => t.id === 't-emir')?.status).toBe('dropped')
+    await expect(page.getByRole('region', { name: 'Today’s progress' })).toContainText('One-off 1/2')
+
+    // Click the task: its pop-up shows the status; add a description and a new time.
+    await emir.getByRole('button', { name: /Follow up with Emir/ }).click()
+    const dialog = page.getByRole('dialog', { name: 'Task' })
+    await expect(dialog.getByRole('list', { name: 'Details' })).toContainText('Not done')
+    await dialog.getByRole('textbox', { name: 'Description' }).fill('Ask about the January budget')
+    await dialog.getByLabel('From').fill('715')
+    await dialog.getByRole('button', { name: 'Save' }).click()
+    await expect(dialog).toBeHidden()
+    await expect(emir).toContainText('07:15')
+    await expect(emir).toContainText('Ask about the January budget')
+    await expect.poll(() => db.tasks?.find((t) => t.id === 't-emir')?.time).toBe('07:15:00')
+    expect(db.tasks?.find((t) => t.id === 't-emir')?.notes).toBe('Ask about the January budget')
+
+    // The pencil opens the same pop-up.
+    await emir.getByRole('button', { name: 'Edit task' }).click()
+    await expect(dialog.getByRole('textbox', { name: 'Description' })).toHaveValue('Ask about the January budget')
   })
 
   test('answers the missed-yesterday prompt', async ({ page }) => {
     const db = await openToday(page)
 
     await expect(page.getByText('Yesterday you missed')).toBeVisible()
-    await expect(page.getByText('Your streak is safe')).toBeVisible()
     await page.getByRole('group', { name: 'Why did you miss Read 20 pages?' }).getByRole('button', { name: 'Tired' }).click()
 
     await expect(page.getByText('Yesterday you missed')).toBeHidden()
@@ -188,7 +219,7 @@ test.describe('Today page', () => {
     await dialog.getByRole('button', { name: 'Add task' }).click()
     await expect(dialog.getByText('Type a task')).toBeVisible()
     await dialog.getByRole('textbox', { name: 'Task name' }).fill('Call accountant #personal !low')
-    await dialog.getByLabel('Time').fill('15:00')
+    await dialog.getByLabel('From').fill('15:00')
     await dialog.getByRole('button', { name: 'Add task' }).click()
     await expect(page.getByText('Task added')).toBeVisible()
     await expect(tasksCard(page).getByText('Call accountant')).toBeVisible()
@@ -217,6 +248,20 @@ test.describe('Today page', () => {
       .toEqual([false, false, true, false, false, false, false])
   })
 
+  test('adds a task with a time range (classes 08:00–11:00)', async ({ page }) => {
+    const db = await openToday(page)
+    const dialog = await openAddTask(page)
+    await dialog.getByRole('textbox', { name: 'Task name' }).fill('Classes')
+    await dialog.getByLabel('From').fill('8')
+    await dialog.getByLabel('Until').fill('11')
+    await dialog.getByRole('button', { name: 'Add task' }).click()
+    await expect(dialog).toBeHidden()
+
+    const row = tasksCard(page).getByRole('listitem').filter({ hasText: 'Classes' })
+    await expect(row).toContainText('08:00–11:00')
+    await expect.poll(() => db.tasks?.find((t) => t.title === 'Classes')?.end_time).toBe('11:00:00')
+  })
+
   test('adds a task, ticks it, and it moves to the bottom', async ({ page }) => {
     const db = await openToday(page)
     const rows = tasksCard(page).getByRole('list', { name: 'Tasks' }).getByRole('listitem')
@@ -229,10 +274,10 @@ test.describe('Today page', () => {
     // Unfinished "Anytime" task: after the timed ones, above the done one.
     await expect(rows).toHaveText([/Wake up/, /Follow up with Emir/, /Read 20 pages/, /Buy printer ink/, /Update portfolio/])
 
-    await page.getByRole('checkbox', { name: 'Buy printer ink' }).click()
+    await doneButton(tasksCard(page), 'Buy printer ink').click()
 
     await expect(rows.last()).toContainText('Buy printer ink')
-    await expect(page.getByRole('checkbox', { name: 'Buy printer ink' })).toBeChecked()
+    await expect(doneButton(tasksCard(page), 'Buy printer ink')).toHaveAttribute('aria-pressed', 'true')
     await expect(rows).toHaveText([/Wake up/, /Follow up with Emir/, /Read 20 pages/, /Update portfolio/, /Buy printer ink/])
     await expect.poll(() => db.tasks?.find((t) => t.title === 'Buy printer ink')?.status).toBe('done')
   })
@@ -263,11 +308,11 @@ test.describe('Today page', () => {
     await expect(addButton).toBeFocused()
 
     // Tick it with Space; focus follows the row to the bottom.
-    const checkbox = page.getByRole('checkbox', { name: 'Water plants' })
-    await tabTo(checkbox)
+    const done = doneButton(tasksCard(page), 'Water plants')
+    await tabTo(done)
     await page.keyboard.press('Space')
-    await expect(checkbox).toBeChecked()
-    await expect(checkbox).toBeFocused()
+    await expect(done).toHaveAttribute('aria-pressed', 'true')
+    await expect(done).toBeFocused()
     await expect.poll(() => db.tasks?.find((t) => t.title === 'Water plants')?.status).toBe('done')
 
     // Answering the prompt removes it; focus moves to the next control instead of the top of the page.
@@ -323,10 +368,9 @@ test.describe('Today page', () => {
     const portfolio = row('Update portfolio')
     const trash = portfolio.getByRole('button', { name: 'Delete task' })
 
-    // With a mouse the trash button only shows when the row is hovered.
-    await expect(trash).toHaveCSS('opacity', '0')
-    await portfolio.hover()
-    await expect(trash).toHaveCSS('opacity', '1')
+    // Edit and Delete are always visible, also with a mouse.
+    await expect(trash).toBeVisible()
+    await expect(portfolio.getByRole('button', { name: 'Edit task' })).toBeVisible()
 
     // One-off: gone at once, Undo brings back the same task (still done).
     await trash.click()
@@ -336,7 +380,7 @@ test.describe('Today page', () => {
 
     await page.getByRole('button', { name: 'Undo' }).click()
     await expect(portfolio).toBeVisible()
-    await expect(page.getByRole('checkbox', { name: 'Update portfolio' })).toBeChecked()
+    await expect(doneButton(card, 'Update portfolio')).toHaveAttribute('aria-pressed', 'true')
     await expect.poll(() => db.tasks?.find((t) => t.id === 't-portfolio')?.status).toBe('done')
 
     // Repeating: asks first. Cancel keeps it, Remove takes it off the routine (past days stay).
@@ -362,9 +406,7 @@ test.describe('Today page', () => {
     const card = tasksCard(page)
     const trash = card.getByRole('listitem').filter({ hasText: 'Read 20 pages' }).getByRole('button', { name: 'Delete task' })
 
-    // Keyboard focus shows the button.
     await trash.focus()
-    await expect(trash).toHaveCSS('opacity', '1')
     const dialog = page.getByRole('dialog')
 
     // Escape closes the dialog and focus goes back to the trash button.
@@ -413,8 +455,8 @@ test('Today page fits a phone screen', async ({ page, isMobile }) => {
   test.skip(!isMobile, 'Phone only')
   await openToday(page)
   await expect(page.getByRole('region', { name: 'Today’s progress' })).toBeVisible()
-  // No hover on a touch screen, so the trash buttons are always shown.
-  await expect(tasksCard(page).getByRole('button', { name: 'Delete task' }).first()).toHaveCSS('opacity', '1')
+  // Edit and Delete are always shown.
+  await expect(tasksCard(page).getByRole('button', { name: 'Delete task' }).first()).toBeVisible()
   // A string so this file doesn't need browser types; > 0 means the page scrolls sideways.
   const overflow = Number(await page.evaluate('document.documentElement.scrollWidth - window.innerWidth'))
   expect(overflow).toBeLessThanOrEqual(0)

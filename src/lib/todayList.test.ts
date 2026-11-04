@@ -97,7 +97,7 @@ describe('buildTodayItems', () => {
 
   it('merges scheduled routine items and tasks due that day, sorted', () => {
     const items = buildTodayItems(routineItems, checks, tasks, WED)
-    expect(items.map((i) => i.id)).toEqual(['gym', 't1', 'read', 't2', 'wake', 't3'])
+    expect(items.map((i) => i.id)).toEqual(['gym', 't1', 'read', 't2', 'wake', 't3', 't4'])
   })
 
   it('maps routine items with days and done from the check of that day', () => {
@@ -108,6 +108,7 @@ describe('buildTodayItems', () => {
       title: 'Wake up',
       time: '06:00',
       done: true,
+      missed: false,
       days: WEEKDAYS,
     })
     expect(items.find((i) => i.id === 'gym')?.done).toBe(false)
@@ -121,18 +122,44 @@ describe('buildTodayItems', () => {
       title: 'Follow up with Emir',
       time: '10:30',
       done: false,
+      missed: false,
       tag: 'outreach',
       priority: 'high',
     })
     expect(items.find((i) => i.id === 't3')?.done).toBe(true)
   })
 
-  it('leaves out inactive items, other days and dropped tasks', () => {
+  it('leaves out inactive items and other days', () => {
     const ids = buildTodayItems(routineItems, checks, tasks, WED).map((i) => i.id)
     expect(ids).not.toContain('old')
     expect(ids).not.toContain('weekend')
-    expect(ids).not.toContain('t4')
     expect(ids).not.toContain('t5')
+  })
+
+  it('keeps “Not done” items: dropped tasks and repeating items with a miss reason', () => {
+    const items = buildTodayItems(
+      routineItems,
+      [...checks, { routine_item_id: 'gym', date: WED, done: false, miss_reason: 'Other' }],
+      tasks,
+      WED,
+    )
+    expect(items.find((i) => i.id === 't4')).toMatchObject({ done: false, missed: true })
+    expect(items.find((i) => i.id === 'gym')).toMatchObject({ done: false, missed: true })
+    // Unticked without a reason = still open.
+    expect(items.find((i) => i.id === 'read')).toMatchObject({ done: false, missed: false })
+    // Not-done items sit at the bottom with the done ones.
+    expect(items.map((i) => i.id).slice(-4)).toEqual(['wake', 'gym', 't3', 't4'])
+  })
+
+  it('carries an end time (range) for tasks and routine items', () => {
+    const items = buildTodayItems(
+      [{ ...routineItems[0]!, time: '08:00:00', end_time: '11:00:00' }],
+      [],
+      [{ ...tasks[0]!, end_time: '11:30:00' }],
+      WED,
+    )
+    expect(items.find((i) => i.id === 'wake')?.endTime).toBe('11:00')
+    expect(items.find((i) => i.id === 't1')?.endTime).toBe('11:30')
   })
 
   it('returns an empty list for an empty day', () => {

@@ -792,8 +792,10 @@ export type Database = {
         Row: {
           active: boolean
           created_at: string
+          end_time: string | null
           days: boolean[]
           id: string
+          notes: string | null
           position: number
           time: string | null
           title: string
@@ -802,8 +804,10 @@ export type Database = {
         Insert: {
           active?: boolean
           created_at?: string
+          end_time?: string | null
           days?: boolean[]
           id?: string
+          notes?: string | null
           position?: number
           time?: string | null
           title: string
@@ -812,8 +816,10 @@ export type Database = {
         Update: {
           active?: boolean
           created_at?: string
+          end_time?: string | null
           days?: boolean[]
           id?: string
+          notes?: string | null
           position?: number
           time?: string | null
           title?: string
@@ -871,6 +877,7 @@ export type Database = {
           completed_at: string | null
           contact_id: string | null
           created_at: string
+          end_time: string | null
           due_date: string
           id: string
           notes: string | null
@@ -886,6 +893,7 @@ export type Database = {
           completed_at?: string | null
           contact_id?: string | null
           created_at?: string
+          end_time?: string | null
           due_date?: string
           id?: string
           notes?: string | null
@@ -901,6 +909,7 @@ export type Database = {
           completed_at?: string | null
           contact_id?: string | null
           created_at?: string
+          end_time?: string | null
           due_date?: string
           id?: string
           notes?: string | null

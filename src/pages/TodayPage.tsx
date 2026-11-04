@@ -3,20 +3,17 @@ import { useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 import { useDailyLog, useSaveDailyLog } from '@/api/dailyLog'
-import {
-  useCreateRoutineItem,
-  useRemoveRoutineItem,
-  useSetMissReason,
-  useToggleRoutineCheck,
-} from '@/api/routine'
+import { useCreateRoutineItem, useRemoveRoutineItem, useSetMissReason } from '@/api/routine'
 import { useContacts, useUpdateContact } from '@/api/contacts'
-import { useCreateTask, useDeleteTask, useDropTask, useMoveToToday, useOverdueTasks, useToggleTask } from '@/api/tasks'
+import { useCreateTask, useDeleteTask, useDropTask, useMoveToToday, useOverdueTasks } from '@/api/tasks'
 import { keepFocusPlace } from '@/app/keepFocusPlace'
+import { useTaskActions } from '@/app/useTaskActions'
 import { useTodayData } from '@/app/useTodayData'
 import { EmptyState } from '@/components/EmptyState'
 import { StreakCard } from '@/components/streak/StreakCard'
 import { AddTaskDialog } from '@/components/today/AddTaskDialog'
 import { DailyNoteCard } from '@/components/today/DailyNoteCard'
+import { EditTaskDialog } from '@/components/today/EditTaskDialog'
 import { MissedYesterday } from '@/components/today/MissedYesterday'
 import { OverdueBlock, type OverdueTask } from '@/components/today/OverdueBlock'
 import { ProgressCard } from '@/components/today/ProgressCard'
@@ -111,8 +108,7 @@ export default function TodayPage() {
   const contacts = useContacts()
   const dailyLog = useDailyLog(selected)
 
-  const toggleCheck = useToggleRoutineCheck()
-  const toggleTask = useToggleTask()
+  const taskActions = useTaskActions()
   const createTask = useCreateTask()
   const createRoutine = useCreateRoutineItem()
   const removeRoutine = useRemoveRoutineItem()
@@ -125,6 +121,8 @@ export default function TodayPage() {
 
   const [dismissedMissed, setDismissedMissed] = useState(readDismissed)
   const [addOpen, setAddOpen] = useState(false)
+  /** The row whose Edit pop-up is open, and the day it's on. */
+  const [editing, setEditing] = useState<{ item: TodayItem; date: DateKey } | null>(null)
   // Each "New" click sends a new request: open the pop-up once per request (also when arriving from another page).
   const [seenRequest, setSeenRequest] = useState<number | undefined>(undefined)
   if (quickAddRequest !== seenRequest) {
@@ -134,11 +132,6 @@ export default function TodayPage() {
   // Main column, so focus can stay in place when a banner, overdue row or routine item goes away.
   const mainRef = useRef<HTMLDivElement>(null)
   const keepFocus = () => keepFocusPlace(mainRef.current)
-
-  function handleToggle(item: TodayItem, done: boolean, date: DateKey) {
-    if (item.kind === 'routine') toggleCheck.mutate({ routineItemId: item.id, date, done })
-    else toggleTask.mutate({ id: item.id, done })
-  }
 
   function handleRemoveRoutine(id: string) {
     keepFocus()
@@ -162,6 +155,7 @@ export default function TodayPage() {
           title: result.title,
           dueDate: result.dueDate,
           time: result.time,
+          endTime: result.endTime,
           tag: result.tag,
           priority: result.priority ?? undefined,
         })
@@ -175,7 +169,12 @@ export default function TodayPage() {
           toast.success(`Task added for ${dayName}`, { action: { label: 'View', onClick: () => goTo(day) } })
         }
       } else {
-        await createRoutine.mutateAsync({ title: result.title, days: result.days, time: result.time })
+        await createRoutine.mutateAsync({
+          title: result.title,
+          days: result.days,
+          time: result.time,
+          endTime: result.endTime,
+        })
         toast.success(`Repeating task added · ${formatDays(result.days)}`)
       }
     } catch {
@@ -205,6 +204,20 @@ export default function TodayPage() {
         onSubmit={async (result) => {
           await handleQuickAdd(result)
           setAddOpen(false)
+        }}
+      />
+      <EditTaskDialog
+        item={editing?.item ?? null}
+        date={editing?.date ?? selected}
+        onOpenChange={(open) => !open && setEditing(null)}
+        onSubmit={async (result) => {
+          try {
+            await taskActions.saveEdit(result)
+          } catch {
+            throw new Error("Couldn't save the change. Try again.")
+          }
+          setEditing(null)
+          toast.success('Saved')
         }}
       />
     </>
@@ -239,12 +252,6 @@ export default function TodayPage() {
     <>
       {header}
       <TodayLayout
-        topCards={
-          <>
-            <ProgressCard progress={view.progress} />
-            <StreakCard days={view.streak.days} />
-          </>
-        }
         main={
           <div ref={mainRef} className="contents">
             {!isToday && (
@@ -261,7 +268,6 @@ export default function TodayPage() {
             )}
             <MissedYesterday
               items={missedItems}
-              streakSafe={view.streakSafe}
               onReason={(item, reason) => {
                 keepFocus()
                 setMissReason.mutate({ routineItemId: item.id, date: view.missed.date, reason })
@@ -290,7 +296,7 @@ export default function TodayPage() {
                 onDrop={(item) => {
                   keepFocus()
                   if (item.kind === 'task') {
-                    dropTask.mutate(item.task.id, { onSuccess: () => toast('Task dropped') })
+                    dropTask.mutate(item.task.id, { onSuccess: () => toast('Marked as not done') })
                   } else {
                     updateContact.mutate(
                       { id: item.contact.id, patch: { next_follow_up: null } },
@@ -302,7 +308,8 @@ export default function TodayPage() {
             )}
             <TodayTasksCard
               items={view.items}
-              onToggle={(item, done) => handleToggle(item, done, selected)}
+              onStatus={(item, status) => taskActions.setStatus(item, status, selected)}
+              onEdit={(item) => setEditing({ item, date: selected })}
               onRemove={handleRemoveRoutine}
               onDeleteTask={handleDeleteTask}
               defaultCollapsed={readCollapsed('today')}
@@ -312,7 +319,8 @@ export default function TodayPage() {
               <TodayTasksCard
                 day="tomorrow"
                 items={view.tomorrowItems}
-                onToggle={(item, done) => handleToggle(item, done, addDays(today, 1))}
+                onStatus={(item, status) => taskActions.setStatus(item, status, addDays(today, 1))}
+                onEdit={(item) => setEditing({ item, date: addDays(today, 1) })}
                 onRemove={handleRemoveRoutine}
                 onDeleteTask={handleDeleteTask}
                 defaultCollapsed={readCollapsed('tomorrow')}
@@ -323,6 +331,8 @@ export default function TodayPage() {
         }
         aside={
           <>
+            <ProgressCard progress={view.progress} />
+            <StreakCard days={view.streak.days} />
             <ThisWeekCard week={view.week} />
             {dailyLog.isSuccess ? (
               <DailyNoteCard

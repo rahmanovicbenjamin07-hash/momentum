@@ -1,11 +1,20 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { QuickAddResult } from '@/lib/quickAddSubmit'
 import { AddTaskDialog } from './AddTaskDialog'
 
 // Wednesday.
 const TODAY = '2026-10-28'
+
+// The Day field starts on Tomorrow from 1 PM, so pin the clock: 09:00 in Sarajevo (UTC+1). Only Date is faked.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-28T08:00:00Z'))
+})
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 function setup(onSubmit = vi.fn<(r: QuickAddResult) => void | Promise<void>>(), viewedDay?: string) {
   render(<AddTaskDialog open onOpenChange={() => {}} onSubmit={onSubmit} today={TODAY} viewedDay={viewedDay} />)
@@ -13,7 +22,8 @@ function setup(onSubmit = vi.fn<(r: QuickAddResult) => void | Promise<void>>(), 
     onSubmit,
     name: screen.getByRole('textbox', { name: 'Task name' }),
     day: screen.getByRole('combobox', { name: 'Day' }),
-    time: screen.getByLabelText('Time'),
+    time: screen.getByLabelText('From'),
+    endTime: screen.getByLabelText('Until'),
     submit: screen.getByRole('button', { name: 'Add task' }),
   }
 }
@@ -40,7 +50,7 @@ describe('AddTaskDialog', () => {
     const { onSubmit, name, submit } = setup()
     await user.type(name, 'Call Amir #outreach !high')
     await user.click(submit)
-    expect(onSubmit).toHaveBeenCalledWith({ kind: 'task', title: 'Call Amir', time: null, tag: 'outreach', priority: 'high', dueDate: TODAY })
+    expect(onSubmit).toHaveBeenCalledWith({ kind: 'task', title: 'Call Amir', time: null, endTime: null, tag: 'outreach', priority: 'high', dueDate: TODAY })
   })
 
   it('plans a task for tomorrow at a time', async () => {
@@ -51,6 +61,37 @@ describe('AddTaskDialog', () => {
     await user.type(time, '09:30')
     await user.click(submit)
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ kind: 'task', dueDate: '2026-10-29', time: '09:30' }))
+  })
+
+  it('adds a task with a time range, typed the quick 24-hour way', async () => {
+    const user = userEvent.setup()
+    const { onSubmit, name, time, endTime, submit } = setup()
+    await user.type(name, 'Classes')
+    await user.type(time, '8')
+    await user.type(endTime, '11')
+    await user.click(submit)
+    expect(time).toHaveValue('08:00')
+    expect(endTime).toHaveValue('11:00')
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ title: 'Classes', time: '08:00', endTime: '11:00' }))
+  })
+
+  it('refuses an end time without a start, or before it', async () => {
+    const user = userEvent.setup()
+    const { onSubmit, name, time, endTime, submit } = setup()
+    await user.type(name, 'Classes')
+    await user.type(endTime, '11:00')
+    await user.click(submit)
+    expect(await screen.findByText('Set a start time first')).toBeInTheDocument()
+    await user.type(time, '12:00')
+    await user.click(submit)
+    expect(await screen.findByText('End time must be after the start time')).toBeInTheDocument()
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('starts on Tomorrow from 1 PM when looking at today', () => {
+    vi.setSystemTime(new Date('2026-10-28T12:30:00Z')) // 13:30 in Sarajevo
+    const { day } = setup()
+    expect(day).toHaveValue('tomorrow')
   })
 
   it('every day: Day is switched off; every week: repeats on the chosen weekday', async () => {
@@ -68,6 +109,7 @@ describe('AddTaskDialog', () => {
       kind: 'routine',
       title: 'Stretch',
       time: null,
+      endTime: null,
       days: [false, false, false, true, false, false, false],
     })
   })
