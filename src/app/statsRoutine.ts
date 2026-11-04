@@ -1,12 +1,10 @@
 /**
- * Stats → Routine progress and Reports: routine-day rows from SQL → checks and
- * streak days for src/lib. Pure (tested in statsRoutine.test.ts).
+ * Stats → Routine progress and Reports: routine-day rows from SQL → checks for src/lib. Pure (tested in statsRoutine.test.ts).
  */
 import type { RoutineDayRow } from '@/api/stats'
 import type { RoutineCardData } from '@/components/routine/RoutineItemCards'
-import { addDays, daysBetween, type DateKey } from '@/lib/dates'
+import type { DateKey } from '@/lib/dates'
 import type { RoutineItemStats, RoutineStatsCheck } from '@/lib/routineStats'
-import type { StreakDay } from '@/lib/streak'
 import type { MissReason, RoutineItem } from '@/schemas/today'
 
 /**
@@ -19,22 +17,6 @@ export function checksFromRows(rows: readonly RoutineDayRow[], itemId: string, t
     .filter((r) => r.routine_item_id === itemId)
     .filter((r) => !(r.day === today && !r.done && r.miss_reason === null))
     .map((r) => ({ date: r.day, done: r.done, miss_reason: r.miss_reason as MissReason | null }))
-}
-
-/** Scheduled / done per day from…to (every day present, so streaks don't break on empty days). */
-export function streakDaysFromRows(rows: readonly RoutineDayRow[], from: DateKey, to: DateKey): StreakDay[] {
-  const byDay = new Map<DateKey, StreakDay>()
-  for (let i = 0; i <= daysBetween(from, to); i += 1) {
-    const date = addDays(from, i)
-    byDay.set(date, { date, scheduled: 0, done: 0 })
-  }
-  for (const r of rows) {
-    const day = byDay.get(r.day)
-    if (!day || !r.scheduled) continue
-    day.scheduled += 1
-    if (r.done) day.done += 1
-  }
-  return [...byDay.values()]
 }
 
 export function routineCards(

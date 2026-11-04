@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useDailyCompletion, useReplyRates, useRoutineDays, useTasksByTag } from '@/api/stats'
+import { useDailyCompletion, useReplyRates, useTasksByTag } from '@/api/stats'
 import {
   buildKpis,
   completionFetchRange,
@@ -10,7 +10,6 @@ import {
   periodTotals,
   tagCounts,
 } from '@/app/statsOverview'
-import { streakDaysFromRows } from '@/app/statsRoutine'
 import { useAuth } from '@/app/auth-context'
 import { useTodayData } from '@/app/useTodayData'
 import { PageHeader } from '@/components/PageHeader'
@@ -22,7 +21,7 @@ import { RangeToggle } from '@/components/stats/RangeToggle'
 import { TagBars } from '@/components/stats/TagBars'
 import { toDateKey } from '@/lib/dates'
 import { periodRange, strongestWeekday } from '@/lib/stats'
-import { longestStreak } from '@/lib/streak'
+import { longestStreak, streakDaysFromTotals } from '@/lib/streak'
 import { useParam } from './params'
 import { LoadError, Loading } from './shared'
 
@@ -50,9 +49,10 @@ export default function OverviewTab() {
   const repliesBefore = useReplyRates(previous.from, previous.to)
   const tagsNow = useTasksByTag(current.from, current.to)
   const tagsBefore = useTasksByTag(previous.from, previous.to)
-  const routineYear = useRoutineDays(yearStart, today)
+  // Tasks + repeating items per day this year, for the best streak (90% rule).
+  const yearCompletion = useDailyCompletion(yearStart, today)
 
-  const queries = [completion, repliesNow, repliesBefore, tagsNow, tagsBefore, routineYear]
+  const queries = [completion, repliesNow, repliesBefore, tagsNow, tagsBefore, yearCompletion]
 
   const page = useMemo(() => {
     if (
@@ -61,13 +61,13 @@ export default function OverviewTab() {
       !repliesBefore.data ||
       !tagsNow.data ||
       !tagsBefore.data ||
-      !routineYear.data ||
+      !yearCompletion.data ||
       !todayView
     ) {
       return null
     }
     const currentStreak = todayView.streak.days
-    const best = Math.max(currentStreak, longestStreak(streakDaysFromRows(routineYear.data, yearStart, today)))
+    const best = Math.max(currentStreak, longestStreak(streakDaysFromTotals(yearCompletion.data)))
     const totals = (from: string, to: string, tags: typeof tagsNow.data, replies: typeof repliesNow.data) =>
       periodTotals({ completion: inRange(completion.data, from, to), tags, replies })
     const heatDays = consistencyDays(completion.data)
@@ -89,11 +89,9 @@ export default function OverviewTab() {
     repliesBefore.data,
     tagsNow.data,
     tagsBefore.data,
-    routineYear.data,
+    yearCompletion.data,
     todayView,
     lookback,
-    today,
-    yearStart,
     current.from,
     current.to,
     previous.from,

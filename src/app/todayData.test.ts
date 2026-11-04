@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { addDays } from '@/lib/dates'
 import type { RoutineCheck, RoutineItem, Task } from '@/schemas/today'
-import { checksRange, deriveTodayView, STREAK_LOOKBACK_DAYS } from './todayData'
+import { checksRange, deriveTodayView, streakRange, STREAK_LOOKBACK_DAYS, type DayTotals } from './todayData'
 
 const WED = '2026-10-28'
 const TUE = '2026-10-27'
@@ -40,9 +40,24 @@ function doneDays(itemIds: string[], from: string, to: string): RoutineCheck[] {
   return result
 }
 
+/** Every day from `from` to `to` with `done` of `total` (database totals). */
+function totals(from: string, to: string, done: number, total: number): DayTotals[] {
+  const result: DayTotals[] = []
+  for (let d = from; d <= to; d = addDays(d, 1)) result.push({ day: d, done, total })
+  return result
+}
+
+describe('streakRange', () => {
+  it('covers the lookback up to today', () => {
+    expect(streakRange(WED)).toEqual({ from: addDays(WED, -(STREAK_LOOKBACK_DAYS - 1)), to: WED })
+  })
+})
+
 describe('checksRange', () => {
-  it('covers the streak lookback and ends tomorrow', () => {
-    expect(checksRange(WED, WED)).toEqual({ from: addDays(WED, -(STREAK_LOOKBACK_DAYS - 1)), to: THU })
+  it('covers the week (and yesterday) and ends tomorrow', () => {
+    expect(checksRange(WED, WED)).toEqual({ from: '2026-10-26', to: THU })
+    // Monday: yesterday (Sunday) is in the week before.
+    expect(checksRange('2026-10-26', '2026-10-26').from).toBe('2026-10-25')
   })
 
   it('stretches to a viewed day in the future or far past', () => {
@@ -55,9 +70,9 @@ describe('checksRange', () => {
 describe('deriveTodayView', () => {
   const items = [routine('read'), routine('wake')]
   const checks = [...doneDays(['read', 'wake'], '2026-10-20', '2026-10-26'), check('wake', WED, true)]
-  // Tue 27 missed both (forgiven rest day), Wed: wake done, read open.
+  // Tue 27 missed both, Wed: wake done, read open.
   const tasks = [task('t1', WED, 'done'), task('t2', WED), task('t1', WED, 'done'), task('old', TUE, 'done')]
-  const { from } = checksRange(WED, WED)
+  const history = totals('2026-10-20', '2026-10-25', 2, 2)
 
   const view = deriveTodayView({
     today: WED,
@@ -65,7 +80,7 @@ describe('deriveTodayView', () => {
     timeZone: TZ,
     routineItems: items,
     checks,
-    checksFrom: from,
+    history,
     tasks,
   })
 
@@ -82,7 +97,7 @@ describe('deriveTodayView', () => {
       timeZone: TZ,
       routineItems: [...items, routine('wed-only', { days: [false, false, true, false, false, false, false] })],
       checks,
-      checksFrom: from,
+      history,
       tasks: [...tasks, task('plan', THU)],
     })
     expect(v.tomorrowItems.map((i) => i.id).sort()).toEqual(['plan', 'read', 'wake'])
@@ -94,22 +109,52 @@ describe('deriveTodayView', () => {
       timeZone: TZ,
       routineItems: items,
       checks,
-      checksFrom: from,
+      history,
       tasks: [task('plan', THU)],
     })
     expect(other.tomorrowItems.map((i) => i.id)).toContain('plan')
   })
 
-  it('computes the streak with the rest day', () => {
-    // 20–26 Oct complete (7 days), 27 forgiven, 28 still open
-    expect(view.streak.days).toBe(7)
-    expect(view.streak.forgivenDates).toEqual([TUE])
+  it('a day under 90% breaks the streak (no rest day)', () => {
+    // Tue 27 was 1 of 3 done, Wed 28 still open
+    expect(view.streak.days).toBe(0)
   })
 
-  it('asks about yesterday and says the streak is safe', () => {
+  it('counts 90%+ days from the database and from this week’s loaded lists', () => {
+    const v = deriveTodayView({
+      today: WED,
+      selected: WED,
+      timeZone: TZ,
+      routineItems: items,
+      // Mon 26 and Tue 27 fully done (loaded lists); the database still says 0 for Monday.
+      checks: doneDays(['read', 'wake'], '2026-10-26', TUE),
+      tasks: [task('old', TUE, 'done')],
+      history: [...history, { day: '2026-10-26', done: 0, total: 2 }],
+    })
+    // 20–27 Oct = 8 days; today (0 of 2) is still open and doesn’t break it.
+    expect(v.streak.days).toBe(8)
+    expect(v.streak.todayCounted).toBe(false)
+  })
+
+  it('a not-done task counts against the day', () => {
+    const v = deriveTodayView({
+      today: WED,
+      selected: WED,
+      timeZone: TZ,
+      routineItems: [],
+      checks: [],
+      tasks: [task('a', WED, 'done'), task('b', WED, 'dropped')],
+      history: [],
+    })
+    expect(v.items.find((i) => i.id === 'b')).toMatchObject({ done: false, missed: true })
+    expect(v.progress).toMatchObject({ done: 1, total: 2 })
+    expect(v.openToday).toBe(0)
+    expect(v.streak.days).toBe(0)
+  })
+
+  it('asks about yesterday', () => {
     expect(view.missed.date).toBe(TUE)
     expect(view.missed.items.map((i) => i.id)).toEqual(['read', 'wake'])
-    expect(view.streakSafe).toBe(true)
   })
 
   it('fills the week strip Mon → today', () => {
@@ -123,27 +168,12 @@ describe('deriveTodayView', () => {
       timeZone: TZ,
       routineItems: items,
       checks,
-      checksFrom: from,
+      history,
       tasks,
     })
     expect(other.items.map((i) => i.id).sort()).toEqual(['old', 'read', 'wake'])
     expect(other.openToday).toBe(2)
-    expect(other.streak.days).toBe(7)
-  })
-
-  it('does not count days before the loaded window as missed', () => {
-    const longAgo = routine('long', { created_at: '2020-01-01T10:00:00+00:00' })
-    const windowFrom = '2026-10-26'
-    const v = deriveTodayView({
-      today: WED,
-      selected: WED,
-      timeZone: TZ,
-      routineItems: [longAgo],
-      checks: doneDays(['long'], windowFrom, WED),
-      checksFrom: windowFrom,
-      tasks: [],
-    })
-    expect(v.streak.days).toBe(3)
+    expect(other.streak.days).toBe(view.streak.days)
   })
 
   it('is empty and safe with no data', () => {
@@ -153,12 +183,11 @@ describe('deriveTodayView', () => {
       timeZone: TZ,
       routineItems: [],
       checks: [],
-      checksFrom: from,
       tasks: [],
+      history: [],
     })
     expect(v.items).toEqual([])
     expect(v.streak.days).toBe(0)
     expect(v.missed.items).toEqual([])
-    expect(v.streakSafe).toBe(false)
   })
 })

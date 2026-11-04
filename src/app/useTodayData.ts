@@ -1,8 +1,9 @@
 import { useMemo } from 'react'
 import { useRoutineChecks, useRoutineItems } from '@/api/routine'
+import { useDailyCompletion } from '@/api/stats'
 import { useTasksForDate, useTasksForDates } from '@/api/tasks'
 import { addDays, weekDays, type DateKey, type WeekStartsOn } from '@/lib/dates'
-import { checksRange, deriveTodayView, type TodayView } from './todayData'
+import { checksRange, deriveTodayView, streakRange, type TodayView } from './todayData'
 import { useUserToday } from './useUserToday'
 
 export type TodayData = {
@@ -29,9 +30,13 @@ export function useTodayData(selectedDay?: DateKey): TodayData {
   const dayTasks = useTasksForDate(selected)
   const weekTasks = useTasksForDates(week)
   const tomorrowTasks = useTasksForDate(addDays(today, 1))
+  const streakDays = streakRange(today)
+  const history = useDailyCompletion(streakDays.from, streakDays.to)
 
   const view = useMemo(() => {
-    if (!routine.data || !checks.data || !dayTasks.data || !weekTasks.data || !tomorrowTasks.data) return undefined
+    if (!routine.data || !checks.data || !dayTasks.data || !weekTasks.data || !tomorrowTasks.data || !history.data) {
+      return undefined
+    }
     return deriveTodayView({
       today,
       selected,
@@ -39,8 +44,8 @@ export function useTodayData(selectedDay?: DateKey): TodayData {
       weekStartsOn,
       routineItems: routine.data,
       checks: checks.data,
-      checksFrom: range.from,
       tasks: [...dayTasks.data, ...weekTasks.data, ...tomorrowTasks.data],
+      history: history.data,
     })
   }, [
     today,
@@ -52,7 +57,7 @@ export function useTodayData(selectedDay?: DateKey): TodayData {
     dayTasks.data,
     weekTasks.data,
     tomorrowTasks.data,
-    range.from,
+    history.data,
   ])
 
   return {
@@ -61,13 +66,15 @@ export function useTodayData(selectedDay?: DateKey): TodayData {
     timeZone,
     weekStartsOn,
     view,
-    isError: routine.isError || checks.isError || dayTasks.isError || weekTasks.isError || tomorrowTasks.isError,
+    isError:
+      routine.isError || checks.isError || dayTasks.isError || weekTasks.isError || tomorrowTasks.isError || history.isError,
     refetch: () => {
       void routine.refetch()
       void checks.refetch()
       void dayTasks.refetch()
       void weekTasks.refetch()
       void tomorrowTasks.refetch()
+      void history.refetch()
     },
   }
 }

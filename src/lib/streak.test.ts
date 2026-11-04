@@ -1,18 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import { addDays, type DateKey } from './dates'
 import {
-  buildStreakDays,
   computeStreak,
+  dayCounts,
   getStreakTier,
   legendMilestoneAfter,
   longestStreak,
+  streakDaysFromTotals,
   type StreakDay,
-  type StreakRoutineItem,
 } from './streak'
 
 /**
  * Builds StreakDays ending on `last`, oldest first.
- * 'y' = all done, 'n' = missed (1 of 2 done), '-' = nothing scheduled.
+ * 'y' = all done, 'n' = missed (1 of 2 done), '-' = nothing planned.
  */
 function history(last: DateKey, pattern: string): StreakDay[] {
   const chars = [...pattern]
@@ -23,13 +23,26 @@ function history(last: DateKey, pattern: string): StreakDay[] {
   })
 }
 
-// Week of 19–25 Oct 2026 and 26 Oct (Mon) – 1 Nov (Sun).
 const WED = '2026-10-28'
 
+describe('dayCounts', () => {
+  it('needs at least 90% done', () => {
+    expect(dayCounts({ date: WED, scheduled: 10, done: 9 })).toBe(true)
+    expect(dayCounts({ date: WED, scheduled: 10, done: 8 })).toBe(false)
+    expect(dayCounts({ date: WED, scheduled: 30, done: 27 })).toBe(true)
+    expect(dayCounts({ date: WED, scheduled: 5, done: 4 })).toBe(false) // 80%
+    expect(dayCounts({ date: WED, scheduled: 5, done: 5 })).toBe(true)
+  })
+
+  it('a day with nothing planned does not count', () => {
+    expect(dayCounts({ date: WED, scheduled: 0, done: 0 })).toBe(false)
+  })
+})
+
 describe('computeStreak', () => {
-  it('counts consecutive complete days ending today', () => {
+  it('counts consecutive days ending today', () => {
     const result = computeStreak(history(WED, 'yyyyy'), WED)
-    expect(result).toEqual({ days: 5, todayCounted: true, lastCountedDate: WED, forgivenDates: [] })
+    expect(result).toEqual({ days: 5, todayCounted: true, lastCountedDate: WED })
   })
 
   it('an unfinished today does not break the streak (ends yesterday)', () => {
@@ -37,7 +50,6 @@ describe('computeStreak', () => {
     expect(result.days).toBe(3)
     expect(result.todayCounted).toBe(false)
     expect(result.lastCountedDate).toBe('2026-10-27')
-    expect(result.forgivenDates).toEqual([])
   })
 
   it('is 0 with no data, or when only today is unfinished', () => {
@@ -51,104 +63,20 @@ describe('computeStreak', () => {
     expect(computeStreak(history(WED, 'yy'), WED).days).toBe(2)
   })
 
-  describe('rest days (one missed day per Mon–Sun week)', () => {
-    it('forgives one miss in a week; the rest day bridges but does not add', () => {
-      // 19–25 Oct all done, Mon 26 done, Tue 27 missed, Wed 28 done
-      const result = computeStreak(history(WED, 'yyyyyyyyny'), WED)
-      expect(result.days).toBe(9)
-      expect(result.forgivenDates).toEqual(['2026-10-27'])
-    })
-
-    it('a second miss in the same week ends the streak', () => {
-      // Mon 26 missed, Tue 27 missed, Wed 28 done
-      const result = computeStreak(history(WED, 'yyyyyyynny'), WED)
-      expect(result.days).toBe(1)
-      expect(result.forgivenDates).toEqual([])
-    })
-
-    it('forgives one miss in each of two different weeks', () => {
-      // Thu 22 missed (week of 19th), Tue 27 missed (week of 26th)
-      const result = computeStreak(history(WED, 'yyynyyyyny'), WED)
-      expect(result.days).toBe(8)
-      expect(result.forgivenDates).toEqual(['2026-10-27', '2026-10-22'])
-    })
-
-    it('two misses in one earlier week end the streak there', () => {
-      // Tue 20 and Thu 22 missed (same week), then all done
-      const result = computeStreak(history(WED, 'ynynyyyyyy'), WED)
-      // Counts 28 → 23 (6), forgives 22, counts 21 (7), stops at the second miss on 20.
-      expect(result.days).toBe(7)
-      expect(result.forgivenDates).toEqual(['2026-10-22'])
-    })
-
-    it('a missed yesterday is forgiven while today is still open', () => {
-      // 19–25 done, Mon 26 done, Tue 27 missed, Wed 28 not done yet
-      const result = computeStreak(history(WED, 'yyyyyyyynn'), WED)
-      expect(result.days).toBe(8)
-      expect(result.todayCounted).toBe(false)
-      expect(result.lastCountedDate).toBe('2026-10-26')
-      expect(result.forgivenDates).toEqual(['2026-10-27'])
-    })
-
-    it('misses on Sunday and the next Monday fall in different weeks, so both are forgiven', () => {
-      const TUE = '2026-10-27'
-      // Fri 23, Sat 24 done; Sun 25 missed; Mon 26 missed; Tue 27 done
-      const result = computeStreak(history(TUE, 'yynny'), TUE)
-      expect(result.days).toBe(3)
-      expect(result.forgivenDates).toEqual(['2026-10-26', '2026-10-25'])
-    })
-
-    it('does not report a rest day with no counted day before it', () => {
-      // Tracking starts with a miss on Mon 26
-      const result = computeStreak(history(WED, 'nyy'), WED)
-      expect(result.days).toBe(2)
-      expect(result.forgivenDates).toEqual([])
-    })
+  it('a day under 90% ends the streak (no rest days)', () => {
+    expect(computeStreak(history(WED, 'yyyyyyyyny'), WED).days).toBe(1)
+    expect(computeStreak(history(WED, 'yyyyyyyynn'), WED).days).toBe(0)
   })
 
-  it('days with nothing scheduled count', () => {
-    // Sat 24, Sun 25 have nothing scheduled
-    const result = computeStreak(history(WED, 'yy--yyy'), WED)
-    expect(result.days).toBe(7)
+  it('days with nothing planned are skipped: they neither add nor break', () => {
+    expect(computeStreak(history(WED, 'yy--yyy'), WED).days).toBe(5)
+    expect(computeStreak(history(WED, 'yy-'), WED).days).toBe(2)
   })
 })
 
-describe('buildStreakDays', () => {
-  const weekdays = [true, true, true, true, true, false, false]
-  const items: StreakRoutineItem[] = [
-    { id: 'wake', days: weekdays, active: true, createdOn: '2026-10-23' },
-    { id: 'read', days: Array(7).fill(true), active: true, createdOn: '2026-10-27' },
-    { id: 'old', days: Array(7).fill(true), active: false, createdOn: '2026-10-01' },
-  ]
-  const checks = [
-    { routine_item_id: 'wake', date: '2026-10-23', done: true },
-    { routine_item_id: 'wake', date: '2026-10-26', done: true },
-    { routine_item_id: 'wake', date: '2026-10-27', done: true },
-    { routine_item_id: 'read', date: '2026-10-27', done: false },
-    { routine_item_id: 'old', date: '2026-10-27', done: true },
-  ]
-
-  it('summarises each day from the first active item to today', () => {
-    expect(buildStreakDays(items, checks, WED)).toEqual([
-      { date: '2026-10-23', scheduled: 1, done: 1 }, // Fri
-      { date: '2026-10-24', scheduled: 0, done: 0 }, // Sat
-      { date: '2026-10-25', scheduled: 0, done: 0 }, // Sun
-      { date: '2026-10-26', scheduled: 1, done: 1 }, // Mon ('read' not created yet)
-      { date: '2026-10-27', scheduled: 2, done: 1 }, // Tue (check done: false doesn't count)
-      { date: '2026-10-28', scheduled: 2, done: 0 }, // Wed
-    ])
-  })
-
-  it('returns nothing without active items', () => {
-    expect(buildStreakDays([], [], WED)).toEqual([])
-    expect(buildStreakDays([{ ...items[2]! }], checks, WED)).toEqual([])
-  })
-
-  it('feeds computeStreak end to end', () => {
-    // 23–26 count, 27 missed (forgiven), 28 still open → 4 days
-    const result = computeStreak(buildStreakDays(items, checks, WED), WED)
-    expect(result.days).toBe(4)
-    expect(result.forgivenDates).toEqual(['2026-10-27'])
+describe('streakDaysFromTotals', () => {
+  it('maps daily totals to streak days', () => {
+    expect(streakDaysFromTotals([{ day: WED, total: 10, done: 9 }])).toEqual([{ date: WED, scheduled: 10, done: 9 }])
   })
 })
 
@@ -214,11 +142,13 @@ describe('legendMilestoneAfter', () => {
 })
 
 describe('longestStreak', () => {
-  it('finds the best run, with one forgiven day per week', () => {
-    // 19–28 Oct: two misses in the week of 19–25 Oct break it; the run after is 24–28 Oct.
+  it('finds the best run; any day under 90% breaks it', () => {
     expect(longestStreak(history(WED, 'yyynnyyyyy'))).toBe(5)
-    // One miss on Mon 26 Oct is forgiven: 19–28 Oct counts 9 days.
-    expect(longestStreak(history(WED, 'yyyyyyynyy'))).toBe(9)
+    expect(longestStreak(history(WED, 'yyyyyyynyy'))).toBe(7)
+  })
+
+  it('skips days with nothing planned', () => {
+    expect(longestStreak(history(WED, 'yy--yy'))).toBe(4)
   })
 
   it('is 0 with nothing done', () => {

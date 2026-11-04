@@ -5,7 +5,7 @@ import { useContacts } from '@/api/contacts'
 import { useGoals, useGoalsSeries, useObjectives, useOpenDeals } from '@/api/goals'
 import { useMetrics } from '@/api/metrics'
 import { useRoutineItems } from '@/api/routine'
-import { useOutreachFunnel, useReplyRates, useRoutineDays, useTasksByTag } from '@/api/stats'
+import { useDailyCompletion, useOutreachFunnel, useReplyRates, useRoutineDays, useTasksByTag } from '@/api/stats'
 import { goalSource, pipelineDeals, reportGoalRows } from '@/app/goalsView'
 import { shareCardImage } from '@/app/shareImage'
 import { useAllMetricEntries } from '@/app/statsQueries'
@@ -42,13 +42,14 @@ export default function ReportsTab() {
   const contacts = useContacts()
   const routineItems = useRoutineItems()
   const routineDays = useRoutineDays(ranges.previous.from, today)
+  const completionDays = useDailyCompletion(ranges.previous.from, today)
   const metrics = useMetrics()
   const entries = useAllMetricEntries([ranges.year - 1, ranges.year])
   const objectives = useObjectives()
   const goals = useGoals()
   const goalSeries = useGoalsSeries(goals.data)
   const openDeals = useOpenDeals()
-  const queries = [tagsNow, tagsBefore, repliesNow, repliesBefore, funnelNow, funnelBefore, contacts, routineItems, routineDays, metrics, entries]
+  const queries = [tagsNow, tagsBefore, repliesNow, repliesBefore, funnelNow, funnelBefore, contacts, routineItems, routineDays, completionDays, metrics, entries]
 
   const report = useMemo(() => {
     if (
@@ -61,6 +62,7 @@ export default function ReportsTab() {
       !contacts.data ||
       !routineItems.data ||
       !routineDays.data ||
+      !completionDays.data ||
       !metrics.data ||
       !entries.data
     ) {
@@ -75,6 +77,7 @@ export default function ReportsTab() {
       contacts: contacts.data,
       routineItems: routineItems.data,
       routineDays: routineDays.data,
+      completionDays: completionDays.data,
       metrics: metrics.data,
       entries: entries.data,
     })
@@ -93,6 +96,7 @@ export default function ReportsTab() {
     contacts.data,
     routineItems.data,
     routineDays.data,
+    completionDays.data,
     metrics.data,
     entries.data,
   ])

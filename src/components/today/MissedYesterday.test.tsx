@@ -7,20 +7,20 @@ import { MissedYesterday, type MissedItem } from './MissedYesterday'
 const read = { id: 'r1', title: 'Read 20 pages' }
 const run = { id: 'r2', title: 'Long run' }
 
-function setup(items: MissedItem[], streakSafe = false) {
+function setup(items: MissedItem[]) {
   const onReason = vi.fn<(item: MissedItem, reason: MissReason) => void>()
   const onDismiss = vi.fn<() => void>()
-  const view = render(<MissedYesterday items={items} streakSafe={streakSafe} onReason={onReason} onDismiss={onDismiss} />)
+  const view = render(<MissedYesterday items={items} onReason={onReason} onDismiss={onDismiss} />)
   return { onReason, onDismiss, ...view }
 }
 
 describe('MissedYesterday', () => {
   it('asks about the first missed item with six reasons', () => {
-    setup([read], true)
+    setup([read])
     expect(screen.getByRole('heading', { name: 'Yesterday you missed Read 20 pages' })).toBeInTheDocument()
     const reasons = screen.getByRole('group', { name: 'Why did you miss Read 20 pages?' })
     expect(reasons.querySelectorAll('button')).toHaveLength(6)
-    expect(screen.getByText(/Your streak is safe/)).toBeInTheDocument()
+    expect(screen.queryByText(/streak is safe/)).toBeNull()
   })
 
   it('reports the picked reason', async () => {

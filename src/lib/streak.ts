@@ -1,65 +1,17 @@
-import { addDays, dayIndex, daysBetween, weekStart, type DateKey } from './dates'
+import { addDays, type DateKey } from './dates'
 import { STREAK_LEVELS, streakLevelForDays, type StreakLevel } from './streak-levels'
 
 // ---------------------------------------------------------------------------
 // Daily summaries
 // ---------------------------------------------------------------------------
 
-/** How one calendar day went for the routine. */
+/** How one calendar day went: everything planned (tasks + repeating items) and how much got done. */
 export type StreakDay = {
   date: DateKey
-  /** Routine items scheduled that day. */
+  /** Tasks and repeating items planned that day. */
   scheduled: number
   /** How many of those were done. */
   done: number
-}
-
-/** Minimal routine item shape needed for the streak. */
-export type StreakRoutineItem = {
-  id: string
-  /** Mon..Sun */
-  days: readonly boolean[]
-  active: boolean
-  /** Calendar day the item was created (user's time zone). It isn't due before that. */
-  createdOn: DateKey
-}
-
-export type StreakCheck = {
-  routine_item_id: string
-  date: DateKey
-  done: boolean
-}
-
-/**
- * Builds one StreakDay per date from the first active item's creation day up to `today`.
- * Inactive items are ignored.
- */
-export function buildStreakDays(
-  items: readonly StreakRoutineItem[],
-  checks: readonly StreakCheck[],
-  today: DateKey,
-): StreakDay[] {
-  const active = items.filter((item) => item.active)
-  if (active.length === 0) return []
-
-  const first = active.reduce((min, item) => (item.createdOn < min ? item.createdOn : min), today)
-  const doneSet = new Set(checks.filter((c) => c.done).map((c) => `${c.routine_item_id}|${c.date}`))
-
-  const result: StreakDay[] = []
-  const total = daysBetween(first, today)
-  for (let i = 0; i <= total; i++) {
-    const date = addDays(first, i)
-    const weekday = dayIndex(date) // Mon = 0
-    let scheduled = 0
-    let done = 0
-    for (const item of active) {
-      if (item.createdOn > date || !item.days[weekday]) continue
-      scheduled++
-      if (doneSet.has(`${item.id}|${date}`)) done++
-    }
-    result.push({ date, scheduled, done })
-  }
-  return result
 }
 
 // ---------------------------------------------------------------------------
@@ -67,25 +19,26 @@ export function buildStreakDays(
 // ---------------------------------------------------------------------------
 
 export type StreakResult = {
-  /** Length of the streak in counted days (forgiven days bridge the gap but don't add). */
+  /** Length of the streak in counted days. */
   days: number
   /** True when today already counts. */
   todayCounted: boolean
   /** Most recent counted day, or null when there is no streak. */
   lastCountedDate: DateKey | null
-  /** Missed days that were forgiven inside the streak (newest first). */
-  forgivenDates: DateKey[]
 }
 
-/** A day counts when every routine item scheduled that day is done (nothing scheduled = counts). */
+/** A day counts when at least this % of everything planned that day is done. */
+export const STREAK_PERCENT = 90
+
+/** At least 90% done (whole numbers, so 27 of 30 counts). A day with nothing planned doesn't count. */
 export function dayCounts(day: StreakDay): boolean {
-  return day.done >= day.scheduled
+  return day.scheduled > 0 && day.done * 100 >= day.scheduled * STREAK_PERCENT
 }
 
 /**
  * Current streak:
- * - A day counts when all items scheduled that day are done.
- * - One missed day per Mon–Sun week is forgiven (a "rest day").
+ * - A day counts when at least 90% of what was planned that day is done.
+ * - Days with nothing planned are skipped: they don't add and don't break it.
  * - The streak ends today or yesterday: an unfinished today doesn't break it.
  * - Days missing from `days` (before tracking started) end the streak.
  */
@@ -96,40 +49,40 @@ export function computeStreak(days: readonly StreakDay[], today: DateKey): Strea
 
   let count = 0
   let lastCountedDate: DateKey | null = null
-  const forgivenDates: DateKey[] = []
-  const pendingForgiven: DateKey[] = [] // only kept if a counted day follows (further back)
-  const weeksUsed = new Set<DateKey>()
 
   let date = todayCounted ? today : addDays(today, -1)
   for (;;) {
     const day = byDate.get(date)
     if (!day) break
-
     if (dayCounts(day)) {
       count++
       lastCountedDate ??= date
-      forgivenDates.push(...pendingForgiven)
-      pendingForgiven.length = 0
-    } else {
-      const week = weekStart(date)
-      if (weeksUsed.has(week)) break
-      weeksUsed.add(week)
-      pendingForgiven.push(date)
+    } else if (day.scheduled > 0) {
+      break
     }
     date = addDays(date, -1)
   }
 
-  return { days: count, todayCounted, lastCountedDate, forgivenDates }
+  return { days: count, todayCounted, lastCountedDate }
 }
 
 /**
- * Longest streak inside `days` (same rules as computeStreak: one forgiven day per week).
+ * Longest streak inside `days` (same rules as computeStreak).
  * Days outside the list don't count, so pass e.g. one month to get that month's best.
  */
 export function longestStreak(days: readonly StreakDay[]): number {
   let best = 0
-  for (const day of days) best = Math.max(best, computeStreak(days, day.date).days)
+  let run = 0
+  for (const day of [...days].sort((a, b) => a.date.localeCompare(b.date))) {
+    if (dayCounts(day)) best = Math.max(best, ++run)
+    else if (day.scheduled > 0) run = 0
+  }
   return best
+}
+
+/** Per-day totals (stats_daily_completion rows: tasks + repeating items) → StreakDays. */
+export function streakDaysFromTotals(rows: readonly { day: DateKey; total: number; done: number }[]): StreakDay[] {
+  return rows.map((r) => ({ date: r.day, scheduled: r.total, done: r.done }))
 }
 
 // ---------------------------------------------------------------------------

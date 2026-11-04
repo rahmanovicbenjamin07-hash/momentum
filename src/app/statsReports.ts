@@ -10,11 +10,11 @@ import { groupByMonth, type MonthKey } from '@/lib/metrics'
 import { monthName, previousMonth, reportRange, type ReportInput, type ReportMetric, type ReportNumbers } from '@/lib/reports'
 import { routineTally } from '@/lib/routineStats'
 import type { DateRange } from '@/lib/stats'
-import { longestStreak } from '@/lib/streak'
+import { longestStreak, streakDaysFromTotals } from '@/lib/streak'
 import type { Contact } from '@/schemas/outreach'
 import type { MetricEntry } from '@/schemas/stats'
 import type { RoutineItem } from '@/schemas/today'
-import { checksFromRows, streakDaysFromRows } from './statsRoutine'
+import { checksFromRows } from './statsRoutine'
 
 export type ReportRanges = {
   kind: ReportKind
@@ -120,11 +120,14 @@ export function buildReportInput(input: {
   routineItems: readonly RoutineItem[]
   /** Routine-day rows covering previous.from … today. */
   routineDays: readonly RoutineDayRow[]
+  /** Tasks + repeating totals per day covering previous.from … today (for the 90% streak). */
+  completionDays: readonly { day: DateKey; total: number; done: number }[]
   metrics: readonly MetricRow[]
   entries: readonly MetricEntry[]
 }): ReportInput {
   const { ranges, today } = input
-  const streakIn = (r: DateRange) => longestStreak(streakDaysFromRows(input.routineDays, r.from, r.to))
+  const streakIn = (r: DateRange) =>
+    longestStreak(streakDaysFromTotals(input.completionDays.filter((d) => d.day >= r.from && d.day <= r.to)))
   const currentDeals = dealsIn(input.contacts, ranges.current)
 
   return {

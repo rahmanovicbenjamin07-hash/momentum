@@ -39,7 +39,7 @@ export function useSentMessages(from: DateKey, to: DateKey, timeZone: string) {
 
 export type TaskLite = { due_date: DateKey; time: string | null; status: TaskStatus }
 
-/** Tasks due from…to (dropped ones left out, like the Today page). */
+/** Tasks due from…to (dropped = "Not done", so they count as not done, like the Today page). */
 export function useTasksInRange(from: DateKey, to: DateKey) {
   return useQuery({
     queryKey: extra('tasks', from, to),
@@ -49,7 +49,6 @@ export function useTasksInRange(from: DateKey, to: DateKey) {
         .select('due_date, time, status')
         .gte('due_date', from)
         .lte('due_date', to)
-        .neq('status', 'dropped')
       if (error) throw error
       return data as TaskLite[]
     },

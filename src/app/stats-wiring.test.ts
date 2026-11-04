@@ -21,7 +21,7 @@ import {
   type PeriodTotals,
 } from './statsOverview'
 import { buildReportInput, reportMetrics, reportRanges } from './statsReports'
-import { checksFromRows, streakDaysFromRows, statsYears, yearSpan } from './statsRoutine'
+import { checksFromRows, statsYears, yearSpan } from './statsRoutine'
 
 const TODAY = '2026-10-28' // Wednesday
 
@@ -270,15 +270,6 @@ describe('routine rows', () => {
     expect(checksFromRows([dayRow(TODAY, true)], 'r-wake', TODAY)).toHaveLength(1)
   })
 
-  it('streak days cover every date, counting scheduled rows only', () => {
-    const rows = [dayRow('2026-10-26', true), dayRow('2026-10-26', false, null, true, 'b'), dayRow('2026-10-27', true, null, false)]
-    expect(streakDaysFromRows(rows, '2026-10-26', '2026-10-28')).toEqual([
-      { date: '2026-10-26', scheduled: 2, done: 1 },
-      { date: '2026-10-27', scheduled: 0, done: 0 },
-      { date: '2026-10-28', scheduled: 0, done: 0 },
-    ])
-  })
-
   it('years and spans', () => {
     expect(statsYears(TODAY)).toEqual([2026, 2025])
     expect(yearSpan(2026, TODAY)).toEqual({ from: '2026-01-01', to: TODAY })
@@ -364,6 +355,7 @@ describe('buildReportInput', () => {
       contacts: [won('Café Rondo', '2026-10', 1500), won('Nova Dental', '2026-09', 900), { name: 'Open lead', stage: 'replied' } as Contact],
       routineItems: [wakeItem],
       routineDays: rows,
+      completionDays: rows.map((r) => ({ day: r.day, total: 1, done: r.done ? 1 : 0 })),
       metrics: [money],
       entries: moneyEntries,
     })
@@ -375,7 +367,7 @@ describe('buildReportInput', () => {
       meetings: 7,
       dealsWon: 1,
       dealsAmount: 1500,
-      longestStreak: 28, // 1–28 Oct (weekends have nothing scheduled, so they count)
+      longestStreak: 20, // the 20 weekdays 1–28 Oct (weekends have nothing planned: skipped, not counted)
     })
     expect(input.previous).toMatchObject({ tasksCompleted: 119, dealsWon: 1, dealsAmount: 900 })
     expect(input.dealNames).toEqual(['Café Rondo'])
